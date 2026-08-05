@@ -855,6 +855,15 @@
         else if (isAsset) input.valueType = pType;
         else input.valueType = 'float';
 
+        // Every confirmed booleanlist sample (Unlimited and Fixed Value
+        // alike) carries valueDisplayNames:["0","1"] — the server rejects a
+        // booleanlist input missing these labels ("参数值错误" with no other
+        // detail). No CSV column drives this; it's a structural requirement
+        // of the valueType itself.
+        if (input.valueType === 'booleanlist' && (!input.valueDisplayNames || input.valueDisplayNames.length === 0)) {
+            input.valueDisplayNames = ['0', '1'];
+        }
+
         // Material/Style/Contour Advanced Formula has no Composite type
         // choice — it's always internal paramTypeId 4 (confirmed on all 8
         // Material_AdvancedFormula_* and Style_AdvancedFormula_* samples).
