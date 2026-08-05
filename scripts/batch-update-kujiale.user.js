@@ -401,9 +401,17 @@
             const rowNum = i + 1;
             const serial = cell(row, idx.serial);
             if (!serial) { addErr(rowNum, 'Empty', '', 'Product serial number', 'Model serial ID is empty.'); continue; }
+            // Width/Depth/Height accept either a plain number or a formula
+            // referencing another parameter (e.g. "#W", "#D * 2") — customSize
+            // is commonly set to a self-reference like {"x":"#H","y":"#W","z":"#D"}.
             [['w', idx.w], ['d', idx.d], ['h', idx.h]].forEach(([label, ix]) => {
                 const v = cell(row, ix);
-                if (v && isNaN(Number(v))) addErr(rowNum, serial, '', label.toUpperCase(), `Non-numeric value '${v}'.`);
+                if (!v) return;
+                if (v.includes('#')) {
+                    if (!checkParens(v)) addErr(rowNum, serial, '', label.toUpperCase(), `Unbalanced parentheses in formula '${v}'.`);
+                } else if (isNaN(Number(v))) {
+                    addErr(rowNum, serial, '', label.toUpperCase(), `Non-numeric value '${v}'.`);
+                }
             });
         }
     }
@@ -829,9 +837,9 @@
             if (!ed.outputConfig.quotationConfig) ed.outputConfig.quotationConfig = {};
             if (!ed.outputConfig.quotationConfig.customSize) ed.outputConfig.quotationConfig.customSize = {};
             const cs = ed.outputConfig.quotationConfig.customSize;
-            if (data.w) cs.x = data.w;
-            if (data.d) cs.y = data.d;
-            if (data.h) cs.z = data.h;
+            if (data.w) cs.x = Utils.normalizeExpr(data.w);
+            if (data.d) cs.y = Utils.normalizeExpr(data.d);
+            if (data.h) cs.z = Utils.normalizeExpr(data.h);
         } else if (currentTask.id === 'PARAM_EDIT') {
             data.forEach(row => compileParamEditRow(ed, row));
             selfHealReferencedVars(ed);
