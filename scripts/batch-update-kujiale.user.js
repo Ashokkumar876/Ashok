@@ -91,15 +91,25 @@
             }
             return Utils.normalizeExpr(trimmed);
         },
-        wrapAsset: (val) => {
+        // `link` (the Options/"Material Range" data) is ALWAYS a plain bare
+        // asset id string for every asset type — Material and Style alike —
+        // confirmed on Material_Options_Select/Condition and
+        // Style_Options_Select/Condition alike. Never wrapped.
+        wrapAssetLink: (val) => (val === null || val === undefined) ? val : String(val).trim(),
+        // `value` (and literal case-values inside a Condition `formula`) differ
+        // by Parameter type: Material stores a bare id string; Style stores a
+        // JSON-stringified {obsBrandGoodId,versionId} object — confirmed on
+        // Style_Unlimited vs Material_Unlimited. A "#Ref" reference is never
+        // wrapped either way. Contour has no confirmed sample yet — treated
+        // like Material (bare string) until verified otherwise.
+        wrapAssetValue: (val, pType) => {
             if (val === null || val === undefined || val === "") return val;
-            if (typeof val === 'object') return val;
             const v = String(val).trim();
-            if (v.startsWith("{") && v.includes("obsBrandGoodId")) {
-                try { return JSON.parse(v); } catch (e) { return v; }
+            if (v.startsWith("#") || v.startsWith("@")) return v;
+            if (v.startsWith("{")) return v; // already JSON, pass through
+            if (pType === 'style' && /^[a-zA-Z0-9]{12,24}$/.test(v)) {
+                return JSON.stringify({ obsBrandGoodId: v, versionId: 0 });
             }
-            if (v.startsWith("@") || v.startsWith("#")) return v;
-            if (/^[a-zA-Z0-9]{12,24}$/.test(v)) return { obsBrandGoodId: v, versionId: 0 };
             return v;
         },
         // float2 values are stored as a {"x":...,"y":...} JSON string (see
@@ -156,28 +166,34 @@
         return -1;
     }
 
+    // Column set and names verified against real editorData.inputs entries —
+    // see PARAM_TYPE_ID / grouping / asset-wrapping comments below for what
+    // each one was confirmed against.
     function getColumnIndices(headers) {
         const n = headers.map(Utils.normHeader);
         return {
             serial: findCol(n, 'productserialnumber', 'modelid', 'serial'),
-            category: findCol(n, 'category'),
+            paramCategory: findCol(n, 'parametercategory'),
             globalId: findCol(n, 'globalparameterid', 'globalid'),
-            refName: findCol(n, 'referencename', 'paramname'),
-            name: findCol(n, 'displayname', 'name'),
             grouping: findCol(n, 'grouping', 'group'),
             paramType: findCol(n, 'parametertype'),
             dataType: findCol(n, 'datatype'),
+            displayName: findCol(n, 'displayname'),
+            paramName: findCol(n, 'parametername'),
             value: findCol(n, 'value'),
             min: findCol(n, 'minimum', 'min'),
             max: findCol(n, 'maximum', 'max'),
             step: findCol(n, 'stepsize', 'step'),
             options: findCol(n, 'options', 'recommends'),
             expression: findCol(n, 'expression', 'formulaexpression'),
-            compositeType: findCol(n, 'compositetype', 'composite'),
-            valueRelationship: findCol(n, 'valuerelationships', 'valuerelationship'),
-            defaultState: findCol(n, 'defaultstate'),
             hideCondition: findCol(n, 'hidecondition'),
             lockedCondition: findCol(n, 'lockedcondition', 'lock'),
+            defaultState: findCol(n, 'defaultstate'),
+            imosOutputCondition: findCol(n, 'imosoutputcondition'),
+            compositeType: findCol(n, 'compositetype', 'composite'),
+            valueRelationship: findCol(n, 'valuerelationships', 'valuerelationship'),
+            materialRange: findCol(n, 'materialrange', 'range'),
+            expressionType: findCol(n, 'expressiontype'),
             w: findCol(n, 'modelwidth', 'width', 'w'),
             d: findCol(n, 'modeldepth', 'depth', 'd'),
             h: findCol(n, 'modelheight', 'height', 'h')
@@ -400,13 +416,13 @@
     }
     function validateParamEditHeaders(idx) {
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
-        if (idx.refName === -1) addErr('Header', '', '', 'Reference name', "Missing required column 'Reference name'.");
-        if (idx.name === -1) addErr('Header', '', '', 'Name', "Missing required column 'Name'.");
+        if (idx.paramName === -1) addErr('Header', '', '', 'Parameter Name', "Missing required column 'Parameter Name'.");
+        if (idx.displayName === -1) addErr('Header', '', '', 'Display Name', "Missing required column 'Display Name'.");
         if (idx.grouping === -1) addErr('Header', '', '', 'Grouping', "Missing required column 'Grouping'.");
     }
     function validateParamDelHeaders(idx) {
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
-        if (idx.refName === -1) addErr('Header', '', '', 'Reference name', "Missing required column 'Reference name'.");
+        if (idx.paramName === -1) addErr('Header', '', '', 'Parameter Name', "Missing required column 'Parameter Name'.");
     }
 
     function validateQuoteRows(rows, idx) {
@@ -435,9 +451,9 @@
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
             const serial = cell(row, idx.serial);
-            const refName = cell(row, idx.refName);
+            const refName = cell(row, idx.paramName);
             if (!serial) addErr(rowNum, 'Empty', refName, 'Product serial number', 'Model serial ID is empty.');
-            if (!refName) addErr(rowNum, serial, 'Empty', 'Reference name', 'Reference name is empty.');
+            if (!refName) addErr(rowNum, serial, 'Empty', 'Parameter Name', 'Parameter Name is empty.');
         }
     }
 
@@ -448,28 +464,33 @@
             const rowNum = i + 1;
 
             const serial = cell(row, idx.serial);
-            const refName = cell(row, idx.refName);
-            const name = cell(row, idx.name);
+            const refName = cell(row, idx.paramName);
+            const displayName = cell(row, idx.displayName);
             const grouping = cell(row, idx.grouping);
-            const category = cell(row, idx.category);
+            const paramCategory = cell(row, idx.paramCategory);
             const globalId = cell(row, idx.globalId);
-            const isGlobalRow = category.toLowerCase() === 'global' || !!globalId;
+            const isGlobalRow = paramCategory.toLowerCase() === 'global' || !!globalId;
 
             if (!serial) addErr(rowNum, 'Empty', refName, 'Product serial number', 'Model serial ID is empty.');
             if (!refName) {
-                addErr(rowNum, serial, 'Empty', 'Reference name', 'Reference name is required.');
+                addErr(rowNum, serial, 'Empty', 'Parameter Name', 'Parameter Name is required.');
             } else if (!/^[a-zA-Z0-9_]+$/.test(refName)) {
-                addErr(rowNum, serial, refName, 'Reference name', 'Reference name must be alphanumeric/underscore only.');
+                addErr(rowNum, serial, refName, 'Parameter Name', 'Parameter Name must be alphanumeric/underscore only.');
             } else if (serial) {
                 if (!seenPerModel.has(serial)) seenPerModel.set(serial, new Set());
                 const set = seenPerModel.get(serial);
-                if (set.has(refName)) addErr(rowNum, serial, refName, 'Reference name', `Duplicate '${refName}' for this model — combine into one row instead.`);
+                if (set.has(refName)) addErr(rowNum, serial, refName, 'Parameter Name', `Duplicate '${refName}' for this model — combine into one row instead.`);
                 else set.add(refName);
             }
-            if (!name) addErr(rowNum, serial, refName, 'Name', 'Display Name is required.');
+            if (!displayName) addErr(rowNum, serial, refName, 'Display Name', 'Display Name is required.');
             if (!grouping) addErr(rowNum, serial, refName, 'Grouping', 'Grouping is required.');
 
-            if (isGlobalRow) continue;
+            const imosOutputCondition = cell(row, idx.imosOutputCondition);
+            if (imosOutputCondition && !checkParens(imosOutputCondition)) {
+                addErr(rowNum, serial, refName, 'IMOS Output Condition', 'Unbalanced parentheses.');
+            }
+
+            if (isGlobalRow) { row.__optionsParsed = null; row.__expressionParsed = null; continue; }
 
             const pType = cell(row, idx.paramType).toLowerCase();
             const dType = cell(row, idx.dataType).toLowerCase();
@@ -479,6 +500,8 @@
             const compositeType = cell(row, idx.compositeType).toLowerCase();
             const valueRelationship = cell(row, idx.valueRelationship).toLowerCase();
             const defaultState = cell(row, idx.defaultState).toLowerCase();
+            const materialRange = cell(row, idx.materialRange).toLowerCase();
+            const expressionType = cell(row, idx.expressionType).toLowerCase();
             const optionsRaw = cell(row, idx.options);
             const expressionRaw = cell(row, idx.expression);
             const hideCondition = cell(row, idx.hideCondition);
@@ -504,71 +527,131 @@
                 addErr(rowNum, serial, refName, 'Value', `Numeric value expected, got '${value}'.`);
             }
 
-            if (dType === 'range' || dType === 'interval') {
+            if (!isAsset && (dType === 'range' || dType === 'interval')) {
                 if (!min) addErr(rowNum, serial, refName, 'Minimum', 'Minimum is required for Range/Interval.');
                 if (!max) addErr(rowNum, serial, refName, 'Maximum', 'Maximum is required for Range/Interval.');
             }
 
-            if (dType === 'advanced formula') {
+            // Composite type / Value relationships: Float, Integer, Text, Float2 only.
+            if (!isAsset && dType === 'advanced formula') {
                 if (!compositeType) {
                     addErr(rowNum, serial, refName, 'Composite type', "Composite type is required for Advanced Formula.", "Enter 'Range' or 'Options'.");
                 } else if (!['range', 'options'].includes(compositeType)) {
                     addErr(rowNum, serial, refName, 'Composite type', `Invalid Composite type '${cell(row, idx.compositeType)}'.`, "Enter 'Range' or 'Options'.");
                 }
-                if (!defaultState) {
-                    addErr(rowNum, serial, refName, 'Default state', 'Default state is required for Advanced Formula.', "Enter 'Value' or 'Formula'.");
-                } else if (!['value', 'formula'].includes(defaultState)) {
-                    addErr(rowNum, serial, refName, 'Default state', `Invalid Default state '${cell(row, idx.defaultState)}'.`, "Enter 'Value' or 'Formula'.");
-                }
-                if (!isAsset) {
-                    if (!valueRelationship) {
-                        addErr(rowNum, serial, refName, 'Value relationships', 'Value relationships is required for Advanced Formula.', "Enter 'Outside' or 'Within'.");
-                    } else if (!['outside', 'within'].includes(valueRelationship)) {
-                        addErr(rowNum, serial, refName, 'Value relationships', `Invalid Value relationships '${cell(row, idx.valueRelationship)}'.`, "Enter 'Outside' or 'Within'.");
-                    }
+                if (!valueRelationship) {
+                    addErr(rowNum, serial, refName, 'Value relationships', 'Value relationships is required for Advanced Formula.', "Enter 'Outside' or 'Within'.");
+                } else if (!['outside', 'within'].includes(valueRelationship)) {
+                    addErr(rowNum, serial, refName, 'Value relationships', `Invalid Value relationships '${cell(row, idx.valueRelationship)}'.`, "Enter 'Outside' or 'Within'.");
                 }
                 if (compositeType === 'range') {
                     if (!min) addErr(rowNum, serial, refName, 'Minimum', 'Minimum is required for Advanced Formula + Range.');
                     if (!max) addErr(rowNum, serial, refName, 'Maximum', 'Maximum is required for Advanced Formula + Range.');
                 }
-                if (!expressionRaw) addErr(rowNum, serial, refName, 'Expression', 'Expression is required for Advanced Formula.');
             }
 
+            // Material Range / Expression Type: Material, Style, Contour only.
+            if (isAsset && (dType === 'options' || dType === 'advanced formula')) {
+                if (!materialRange) {
+                    addErr(rowNum, serial, refName, 'Material Range', 'Material Range is required for Options / Advanced Formula on Material, Style, or Contour.', "Enter 'Select' or 'Condition'.");
+                } else if (!['select', 'condition'].includes(materialRange)) {
+                    addErr(rowNum, serial, refName, 'Material Range', `Invalid Material Range '${cell(row, idx.materialRange)}'.`, "Enter 'Select' or 'Condition'.");
+                }
+            }
+            if (isAsset && (dType === 'formula' || dType === 'advanced formula')) {
+                if (!expressionType) {
+                    addErr(rowNum, serial, refName, 'Expression Type', 'Expression Type is required for Formula / Advanced Formula on Material, Style, or Contour.', "Enter 'Reference' or 'Condition'.");
+                } else if (!['reference', 'condition'].includes(expressionType)) {
+                    addErr(rowNum, serial, refName, 'Expression Type', `Invalid Expression Type '${cell(row, idx.expressionType)}'.`, "Enter 'Reference' or 'Condition'.");
+                }
+            }
+            // Default state applies to Advanced Formula regardless of asset-ness.
+            if (dType === 'advanced formula') {
+                if (!defaultState) {
+                    addErr(rowNum, serial, refName, 'Default state', 'Default state is required for Advanced Formula.', "Enter 'Value' or 'Formula'.");
+                } else if (!['value', 'formula'].includes(defaultState)) {
+                    addErr(rowNum, serial, refName, 'Default state', `Invalid Default state '${cell(row, idx.defaultState)}'.`, "Enter 'Value' or 'Formula'.");
+                }
+            }
+
+            if (!isAsset && dType === 'advanced formula' && !expressionRaw) {
+                addErr(rowNum, serial, refName, 'Expression', 'Expression is required for Advanced Formula.');
+            }
             if (dType === 'formula' && !expressionRaw) {
                 addErr(rowNum, serial, refName, 'Expression', 'Expression is required for Formula.');
             }
+            if (isAsset && dType === 'advanced formula' && expressionType && !expressionRaw) {
+                addErr(rowNum, serial, refName, 'Expression', 'Expression is required for Advanced Formula.');
+            }
 
             let optionsParsed = null;
-            if (dType === 'options' || (dType === 'advanced formula' && compositeType === 'options')) {
-                if (!optionsRaw) {
-                    addErr(rowNum, serial, refName, 'Options', 'Options is required for this Data type.', 'Provide a JSON array, e.g. [{"name":"A","value":"1"}].');
-                } else {
+            let expressionParsed = null;
+
+            if (!isAsset) {
+                if (dType === 'options' || (dType === 'advanced formula' && compositeType === 'options')) {
+                    if (!optionsRaw) {
+                        addErr(rowNum, serial, refName, 'Options', 'Options is required for this Data type.', 'Provide a JSON array, e.g. [{"name":"A","value":"1"}].');
+                    } else {
+                        try {
+                            optionsParsed = JSON.parse(optionsRaw);
+                            if (!Array.isArray(optionsParsed)) throw new Error('not array');
+                            optionsParsed.forEach((o, oi) => {
+                                if (!o || o.name === undefined || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
+                            });
+                        } catch (e) {
+                            addErr(rowNum, serial, refName, 'Options', `Options is not a valid JSON array of {name,value}: ${e.message}`);
+                            optionsParsed = null;
+                        }
+                    }
+                } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
                     try {
                         optionsParsed = JSON.parse(optionsRaw);
                         if (!Array.isArray(optionsParsed)) throw new Error('not array');
-                        optionsParsed.forEach((o, oi) => {
-                            if (!o || o.name === undefined || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
-                        });
                     } catch (e) {
-                        addErr(rowNum, serial, refName, 'Options', `Options is not a valid JSON array of {name,value}: ${e.message}`);
+                        addErr(rowNum, serial, refName, 'Options', `Recommends value is not a valid JSON array: ${e.message}`);
                         optionsParsed = null;
                     }
                 }
-            } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
-                try {
-                    optionsParsed = JSON.parse(optionsRaw);
-                    if (!Array.isArray(optionsParsed)) throw new Error('not array');
-                } catch (e) {
-                    addErr(rowNum, serial, refName, 'Options', `Recommends value is not a valid JSON array: ${e.message}`);
-                    optionsParsed = null;
+            } else {
+                // Asset Options data: "Select" needs a plain bare id in Options;
+                // "Condition" needs a JSON {cases,defaultValue} block.
+                const usesLink = dType === 'options' || (dType === 'advanced formula' && materialRange);
+                if (usesLink) {
+                    if (!optionsRaw) {
+                        addErr(rowNum, serial, refName, 'Options', 'Options is required when Material Range is set.');
+                    } else if (materialRange === 'condition') {
+                        try {
+                            optionsParsed = JSON.parse(optionsRaw);
+                            if (!optionsParsed || !Array.isArray(optionsParsed.cases) || optionsParsed.defaultValue === undefined) {
+                                throw new Error('expected {"cases":[...],"defaultValue":...}');
+                            }
+                        } catch (e) {
+                            addErr(rowNum, serial, refName, 'Options', `Options must be a JSON {"cases":[...],"defaultValue":...} block for Material Range = Condition: ${e.message}`);
+                            optionsParsed = null;
+                        }
+                    } else if (materialRange === 'select' && optionsRaw.trim().startsWith('{')) {
+                        addErr(rowNum, serial, refName, 'Options', 'Options should be a single plain asset id for Material Range = Select, not JSON.');
+                    }
+                }
+                // Asset Expression data: "Reference" is a plain string;
+                // "Condition" needs a JSON {cases,defaultValue} block.
+                if (expressionType === 'condition' && expressionRaw) {
+                    try {
+                        expressionParsed = JSON.parse(expressionRaw);
+                        if (!expressionParsed || !Array.isArray(expressionParsed.cases) || expressionParsed.defaultValue === undefined) {
+                            throw new Error('expected {"cases":[...],"defaultValue":...}');
+                        }
+                    } catch (e) {
+                        addErr(rowNum, serial, refName, 'Expression', `Expression must be a JSON {"cases":[...],"defaultValue":...} block for Expression Type = Condition: ${e.message}`);
+                        expressionParsed = null;
+                    }
                 }
             }
 
-            let expressionValid = true;
-            if (expressionRaw && expressionRaw.trim().startsWith('{')) {
-                try { JSON.parse(expressionRaw); } catch (e) { addErr(rowNum, serial, refName, 'Expression', 'Expression contains invalid JSON.'); expressionValid = false; }
+            if (!isAsset && expressionRaw && expressionRaw.trim().startsWith('{')) {
+                try { JSON.parse(expressionRaw); } catch (e) { addErr(rowNum, serial, refName, 'Expression', 'Expression contains invalid JSON.'); }
             }
-            [['Hide condition', hideCondition], ['Minimum', min], ['Maximum', max], ['Expression', expressionRaw]].forEach(([label, val]) => {
+            [['Hide condition', hideCondition], ['Minimum', min], ['Maximum', max], ['Expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([label, val]) => {
                 if (val && !checkParens(val)) addErr(rowNum, serial, refName, label, 'Unbalanced parentheses.');
             });
 
@@ -578,7 +661,7 @@
             }
 
             row.__optionsParsed = optionsParsed;
-            row.__expressionValid = expressionValid;
+            row.__expressionParsed = expressionParsed;
         }
     }
 
@@ -602,18 +685,18 @@
             if (!map.has(serial)) map.set(serial, []);
 
             if (taskId === 'PARAM_DEL') {
-                map.get(serial).push({ refName: cell(row, idx.refName) });
+                map.get(serial).push({ refName: cell(row, idx.paramName) });
                 continue;
             }
 
-            const category = cell(row, idx.category);
+            const paramCategory = cell(row, idx.paramCategory);
             const globalId = cell(row, idx.globalId);
             map.get(serial).push({
-                refName: cell(row, idx.refName),
-                name: cell(row, idx.name),
+                refName: cell(row, idx.paramName),
+                displayName: cell(row, idx.displayName),
                 grouping: cell(row, idx.grouping),
-                category, globalId,
-                isGlobalRow: category.toLowerCase() === 'global' || !!globalId,
+                category: paramCategory, globalId,
+                isGlobalRow: paramCategory.toLowerCase() === 'global' || !!globalId,
                 parameterType: cell(row, idx.paramType).toLowerCase(),
                 dataType: cell(row, idx.dataType).toLowerCase(),
                 value: cell(row, idx.value),
@@ -623,9 +706,14 @@
                 compositeType: cell(row, idx.compositeType).toLowerCase(),
                 valueRelationship: cell(row, idx.valueRelationship).toLowerCase(),
                 defaultState: cell(row, idx.defaultState).toLowerCase(),
+                materialRange: cell(row, idx.materialRange).toLowerCase(),
+                expressionType: cell(row, idx.expressionType).toLowerCase(),
                 hideCondition: cell(row, idx.hideCondition),
+                imosOutputCondition: cell(row, idx.imosOutputCondition),
+                optionsRaw: cell(row, idx.options),
                 expressionRaw: cell(row, idx.expression),
-                optionsParsed: row.__optionsParsed || null
+                optionsParsed: row.__optionsParsed || null,
+                expressionParsed: row.__expressionParsed || null
             });
         }
         return map;
@@ -665,14 +753,64 @@
         if (!target.paramNames.includes(refName)) target.paramNames.push(refName);
     }
 
-    function buildOptionEntries(parsedArr, isAsset) {
+    // Only used for non-asset Options/Range-family parameters (editorOptions /
+    // editorRecommends) — asset types route their "Options" data through
+    // `link` instead (see buildAssetConditionJson).
+    function buildOptionEntries(parsedArr) {
         return parsedArr.map(o => ({
             name: o.name != null ? String(o.name) : '',
-            value: isAsset ? Utils.wrapAsset(o.value) : (o.value != null ? String(o.value) : ''),
+            value: o.value != null ? String(o.value) : '',
             ignore: (o.ignore !== undefined && o.ignore !== null && o.ignore !== '') ? Utils.normalizeExpr(String(o.ignore)) : (o.ignore === '' ? '' : null),
             priority: o.priority != null ? o.priority : '',
             extAttr: o.extAttr || {}
         }));
+    }
+
+    // Asset "Material Range = Condition" data (the `link` field): case/default
+    // values are always bare asset ids, never wrapped — confirmed on both
+    // Material_Options_Condition and Style_Options_Condition.
+    function buildAssetConditionJson(parsed) {
+        if (!parsed) return '';
+        const obj = _.cloneDeep(parsed);
+        if (Array.isArray(obj.cases)) {
+            obj.cases.forEach(c => { if (c.condition) c.condition = Utils.normalizeExpr(c.condition); });
+        }
+        return JSON.stringify(obj);
+    }
+
+    // Asset "Expression Type = Condition" data (the `formula` field): literal
+    // (non-#Reference) case/default values get wrapped per Utils.wrapAssetValue
+    // — bare for Material/Contour, {obsBrandGoodId,versionId} JSON for Style.
+    function buildAssetFormulaConditionJson(parsed, pType) {
+        if (!parsed) return '';
+        const obj = _.cloneDeep(parsed);
+        if (Array.isArray(obj.cases)) {
+            obj.cases.forEach(c => {
+                if (c.condition) c.condition = Utils.normalizeExpr(c.condition);
+                if (c.value !== undefined) c.value = Utils.wrapAssetValue(c.value, pType);
+            });
+        }
+        if (obj.defaultValue !== undefined) obj.defaultValue = Utils.wrapAssetValue(obj.defaultValue, pType);
+        return JSON.stringify(obj);
+    }
+
+    // IMOS Output Condition -> editorData.outputConfig.productionParams[],
+    // keyed by paramName. Confirmed shape: { formulaOutput, paramName,
+    // outputName, value, output }. formulaOutput carries the CSV's
+    // true/false/condition string; outputName/value have no CSV column yet
+    // (no confirmed sample showing what drives them) and are left at their
+    // defaults on a newly-created entry.
+    function applyImosOutput(ed, paramName, conditionStr) {
+        if (!conditionStr) return;
+        if (!ed.outputConfig) ed.outputConfig = {};
+        if (!ed.outputConfig.productionParams) ed.outputConfig.productionParams = [];
+        let entry = ed.outputConfig.productionParams.find(p => p.paramName === paramName);
+        if (!entry) {
+            entry = { formulaOutput: '', paramName, outputName: '', value: '', output: true };
+            ed.outputConfig.productionParams.push(entry);
+        }
+        entry.formulaOutput = Utils.normalizeExpr(conditionStr);
+        entry.output = true;
     }
 
     function newInputSkeleton(refName, displayName) {
@@ -692,13 +830,14 @@
     function compileParamEditRow(ed, row) {
         if (!ed.inputs) ed.inputs = [];
         let input = ed.inputs.find(i => i.paramName === row.refName);
-        if (!input) { input = newInputSkeleton(row.refName, row.name); ed.inputs.push(input); }
+        if (!input) { input = newInputSkeleton(row.refName, row.displayName); ed.inputs.push(input); }
 
         if (row.isGlobalRow) {
-            if (row.name) input.displayName = row.name;
+            if (row.displayName) input.displayName = row.displayName;
             if (row.globalId) input.globalId = row.globalId;
             if (row.hideCondition) input.ignore = Utils.normalizeExpr(row.hideCondition);
             applyGrouping(ed, row.refName, row.grouping);
+            applyImosOutput(ed, row.refName, row.imosOutputCondition);
             return;
         }
 
@@ -706,7 +845,7 @@
         const dType = row.dataType;
         const isAsset = ASSET_TYPES.includes(pType);
 
-        if (row.name) input.displayName = row.name;
+        if (row.displayName) input.displayName = row.displayName;
 
         if (pType === 'integer' || pType === 'int') input.valueType = 'int';
         else if (pType === 'text' || pType === 'string') input.valueType = 'string';
@@ -716,11 +855,16 @@
         else if (isAsset) input.valueType = pType;
         else input.valueType = 'float';
 
-        const paramTypeId = computeParamTypeId(dType, row.compositeType);
+        // Material/Style/Contour Advanced Formula has no Composite type
+        // choice — it's always internal paramTypeId 4 (confirmed on all 8
+        // Material_AdvancedFormula_* and Style_AdvancedFormula_* samples).
+        const paramTypeId = isAsset
+            ? computeParamTypeId(dType, 'range')
+            : computeParamTypeId(dType, row.compositeType);
         input.paramTypeId = paramTypeId;
 
         if (row.value !== '') {
-            if (isAsset) input.value = Utils.wrapAsset(row.value);
+            if (isAsset) input.value = Utils.wrapAssetValue(row.value, pType);
             else if (pType === 'float2') input.value = Utils.formatFloat2(row.value);
             else input.value = row.value;
         }
@@ -733,33 +877,74 @@
             if (row.step !== '') input.step = row.step;
         }
 
-        const isOptionsFamily = paramTypeId === 2 || paramTypeId === 7;
-        const isRangeFamily = paramTypeId === 1 || paramTypeId === 3 || paramTypeId === 4;
-        if (row.optionsParsed) {
-            const entries = buildOptionEntries(row.optionsParsed, isAsset);
-            if (isOptionsFamily) { input.editorOptions = entries; input.editorRecommends = []; }
-            else if (isRangeFamily) { input.editorRecommends = entries; input.editorOptions = []; }
-        }
-
-        if (paramTypeId === 4 || paramTypeId === 5 || paramTypeId === 7) {
-            if (row.expressionRaw !== '') {
-                input.formula = Utils.normalizeExpression(row.expressionRaw);
-                input.formulaForm = String(input.formula).trim().startsWith('{') ? 1 : 0;
+        if (isAsset) {
+            // "Options" column drives `link` for Options data type or an
+            // Advanced Formula row with Material Range set — never
+            // editorOptions (that array stays empty for asset types).
+            const usesLink = dType === 'options' || (dType === 'advanced formula' && row.materialRange);
+            if (usesLink && row.optionsRaw !== '') {
+                if (row.materialRange === 'condition') {
+                    input.link = buildAssetConditionJson(row.optionsParsed);
+                    input.linkForm = 1;
+                } else {
+                    input.link = Utils.wrapAssetLink(row.optionsRaw);
+                    input.linkForm = 0;
+                }
+            }
+            // "Expression" column drives `formula` for Formula data type or
+            // an Advanced Formula row with Expression Type set.
+            const usesFormula = dType === 'formula' || (dType === 'advanced formula' && row.expressionType);
+            if (usesFormula && row.expressionRaw !== '') {
+                if (row.expressionType === 'condition') {
+                    input.formula = buildAssetFormulaConditionJson(row.expressionParsed, pType);
+                    input.formulaForm = 1;
+                } else {
+                    input.formula = Utils.normalizeExpr(row.expressionRaw);
+                    input.formulaForm = 0;
+                }
                 input.formulaDisplayName = input.displayName;
             }
-            if (paramTypeId === 4 || paramTypeId === 7) {
+            if (dType === 'advanced formula') {
                 input.status = row.defaultState === 'formula' ? 1 : 0;
                 if (!input.extAttr) input.extAttr = {};
-                input.extAttr.formulaLimit = { value: row.valueRelationship === 'within' ? '1' : '0', displayName: null, valueType: null };
+                // Value relationships (Outside/Within) does not apply to
+                // asset types — formulaLimit is always "0" on every
+                // Material/Style Advanced Formula sample seen.
+                input.extAttr.formulaLimit = { value: '0', displayName: null, valueType: null };
+            } else if (dType !== 'formula' && dType !== 'options') {
+                input.link = null; input.linkForm = 0; input.formula = null; input.formulaForm = 0;
+                if (input.extAttr) delete input.extAttr.formulaLimit;
             }
         } else {
-            input.formula = null; input.formulaForm = 0; input.link = null; input.linkForm = 0;
-            if (input.extAttr) delete input.extAttr.formulaLimit;
+            const isOptionsFamily = paramTypeId === 2 || paramTypeId === 7;
+            const isRangeFamily = paramTypeId === 1 || paramTypeId === 3 || paramTypeId === 4;
+            if (row.optionsParsed) {
+                const entries = buildOptionEntries(row.optionsParsed);
+                if (isOptionsFamily) { input.editorOptions = entries; input.editorRecommends = []; }
+                else if (isRangeFamily) { input.editorRecommends = entries; input.editorOptions = []; }
+            }
+
+            if (paramTypeId === 4 || paramTypeId === 5 || paramTypeId === 7) {
+                if (row.expressionRaw !== '') {
+                    input.formula = Utils.normalizeExpression(row.expressionRaw);
+                    input.formulaForm = String(input.formula).trim().startsWith('{') ? 1 : 0;
+                    input.formulaDisplayName = input.displayName;
+                }
+                if (paramTypeId === 4 || paramTypeId === 7) {
+                    input.status = row.defaultState === 'formula' ? 1 : 0;
+                    if (!input.extAttr) input.extAttr = {};
+                    input.extAttr.formulaLimit = { value: row.valueRelationship === 'within' ? '1' : '0', displayName: null, valueType: null };
+                }
+            } else {
+                input.formula = null; input.formulaForm = 0; input.link = null; input.linkForm = 0;
+                if (input.extAttr) delete input.extAttr.formulaLimit;
+            }
         }
 
         if (row.hideCondition !== '') input.ignore = Utils.normalizeExpr(row.hideCondition);
 
         applyGrouping(ed, row.refName, row.grouping);
+        applyImosOutput(ed, row.refName, row.imosOutputCondition);
     }
 
     function selfHealReferencedVars(ed) {
