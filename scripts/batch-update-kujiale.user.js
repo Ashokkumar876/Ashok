@@ -833,8 +833,13 @@
         if (!input) { input = newInputSkeleton(row.refName, row.displayName); ed.inputs.push(input); }
 
         if (row.isGlobalRow) {
+            // The global definition supplies type/options, but NOT the
+            // value — that stays instance-specific and the editor shows it
+            // as a required, empty field until set. Confirmed by inspection:
+            // attaching LTO with no Value left its Value field blank in the UI.
             if (row.displayName) input.displayName = row.displayName;
             if (row.globalId) input.globalId = row.globalId;
+            if (row.value !== '') input.value = row.value;
             if (row.hideCondition) input.ignore = Utils.normalizeExpr(row.hideCondition);
             applyGrouping(ed, row.refName, row.grouping);
             applyImosOutput(ed, row.refName, row.imosOutputCondition);
