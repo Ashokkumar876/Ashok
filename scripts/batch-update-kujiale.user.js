@@ -946,9 +946,13 @@
         };
     }
 
+    // The panel's open/close animation uses `transition: all 0.2s`, which was
+    // also easing every drag-driven transform update — that 0.2s catch-up lag
+    // is what read as "slow dragging". Suspend the transition only while
+    // actively dragging, restore it afterward so open/close stays animated.
     let xo = 0, yo = 0, ix, iy, dr = false;
-    header.onmousedown = (e) => { ix = e.clientX - xo; iy = e.clientY - yo; dr = true; };
-    document.onmouseup = () => { dr = false; };
+    header.onmousedown = (e) => { ix = e.clientX - xo; iy = e.clientY - yo; dr = true; box.style.transition = 'none'; };
+    document.onmouseup = () => { if (dr) box.style.transition = 'all 0.2s ease-in-out'; dr = false; };
     document.onmousemove = (e) => { if (dr) { xo = e.clientX - ix; yo = e.clientY - iy; box.style.transform = `translate3d(${xo}px,${yo}px,0)`; } };
 
 })();
