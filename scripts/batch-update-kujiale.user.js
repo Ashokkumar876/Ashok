@@ -827,20 +827,66 @@
         };
     }
 
-    function compileParamEditRow(ed, row) {
+    // The library a model's "Import Global Parameter" dialog searches is the
+    // page's own `extendlibraryid` query param — same id the dialog's own
+    // globalinput/new request used, confirmed by network capture.
+    function currentLibraryId() {
+        return new URLSearchParams(window.location.search).get('extendlibraryid') || '';
+    }
+
+    // Fetches a global parameter's full definition from the same endpoint
+    // the "Import Global Parameter" dialog uses (GET .../globalinput/new).
+    // That response — not a bare globalId — is what actually carries
+    // valueType/paramTypeId/editorOptions/min/max/step/link/ignore; those
+    // are NOT reconstructable from the CSV and must come from this lookup.
+    async function fetchGlobalParamDef(paramName, obsLibraryId) {
+        const origin = window.location.origin;
+        const url = `${origin}/editor/api/site/globalinput/new?start=0&num=10&query=${encodeURIComponent(paramName)}&excludevaluetypes=&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
+        const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*' } });
+        if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status}`);
+        const json = await resp.json();
+        const list = (json.d && json.d.inputs) || [];
+        return list.find(x => x.paramName === paramName) || null;
+    }
+
+    // Returns an error string on failure, or undefined on success — the
+    // async global-parameter lookup means this can genuinely fail (network,
+    // not-found), unlike the rest of this function's pure CSV compilation.
+    async function compileParamEditRow(ed, row) {
         if (!ed.inputs) ed.inputs = [];
         let input = ed.inputs.find(i => i.paramName === row.refName);
         if (!input) { input = newInputSkeleton(row.refName, row.displayName); ed.inputs.push(input); }
 
         if (row.isGlobalRow) {
-            // The global definition supplies type/options, but NOT the
-            // value — that stays instance-specific and the editor shows it
-            // as a required, empty field until set. Confirmed by inspection:
-            // attaching LTO with no Value left its Value field blank in the UI.
+            const libId = currentLibraryId();
+            if (!libId) return `Cannot resolve Global parameter '${row.refName}' — this page's URL has no extendlibraryid.`;
+            let def;
+            try {
+                def = await fetchGlobalParamDef(row.refName, libId);
+            } catch (e) {
+                return `Global parameter lookup failed for '${row.refName}': ${e.message}`;
+            }
+            if (!def) return `Global parameter '${row.refName}' not found in this model's library (searched extendlibraryid=${libId}).`;
+
+            input.globalId = def.globalId != null ? def.globalId : input.globalId;
+            input.displayName = def.displayName || input.displayName;
+            input.valueType = def.valueType || input.valueType;
+            input.paramTypeId = def.paramTypeId != null ? def.paramTypeId : input.paramTypeId;
+            input.editorOptions = def.editorOptions || [];
+            input.editorRecommends = def.editorRecommends || [];
+            input.min = def.min != null ? def.min : input.min;
+            input.max = def.max != null ? def.max : input.max;
+            input.step = def.step != null ? def.step : input.step;
+            input.link = def.link || input.link;
+            input.value = def.value != null ? def.value : input.value;
+            if (def.ignore !== undefined) input.ignore = def.ignore;
+
+            // CSV values, when supplied, override the catalog defaults.
             if (row.displayName) input.displayName = row.displayName;
             if (row.globalId) input.globalId = row.globalId;
             if (row.value !== '') input.value = row.value;
             if (row.hideCondition) input.ignore = Utils.normalizeExpr(row.hideCondition);
+
             applyGrouping(ed, row.refName, row.grouping);
             applyImosOutput(ed, row.refName, row.imosOutputCondition);
             return;
@@ -1056,7 +1102,10 @@
             if (data.d) cs.y = Utils.normalizeExpr(data.d);
             if (data.h) cs.z = Utils.normalizeExpr(data.h);
         } else if (currentTask.id === 'PARAM_EDIT') {
-            data.forEach(row => compileParamEditRow(ed, row));
+            for (const row of data) {
+                const rowErr = await compileParamEditRow(ed, row);
+                if (rowErr) return { ok: false, msg: rowErr };
+            }
             selfHealReferencedVars(ed);
         } else if (currentTask.id === 'PARAM_DEL') {
             const depErr = checkDeletionDependencies(ed, data);
