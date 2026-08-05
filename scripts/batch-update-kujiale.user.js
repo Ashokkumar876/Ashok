@@ -1054,7 +1054,7 @@
         if (_.isEqual(original, ed)) return { ok: true };
 
         const bodyStr = JSON.stringify(ed);
-        const validation = await callValidateApi(bodyStr);
+        const validation = await callValidateApi(bodyStr, ed.inputs);
         if (!validation.ok) return { ok: false, msg: validation.msg };
 
         let save;
@@ -1081,7 +1081,31 @@
         return { ok: true };
     }
 
-    async function callValidateApi(bodyStr) {
+    // Common Kujiale backend error phrases -> readable English.
+    const ZH_TO_EN = {
+        '参数值错误': 'Invalid parameter value',
+        '值不能为空': 'Value cannot be empty',
+        '未找到对应的模型': 'Corresponding model not found',
+        '模型数据损坏': 'Model data is corrupt',
+        '变量最小值错误': 'Variable minimum boundary error',
+        '变量最大值错误': 'Variable maximum boundary error',
+        '变量默认值错误': 'Variable default value error',
+        '数据输出设置错误': 'Production output mapping error (dangling reference)',
+        '变量可选值存在错误': 'Option configuration error (invalid ignore expression or undefined variable reference)'
+    };
+    function translateServerMsg(msg) {
+        if (!msg) return msg;
+        for (const [zh, en] of Object.entries(ZH_TO_EN)) {
+            if (msg.includes(zh)) return `${en} (${msg})`;
+        }
+        return msg;
+    }
+
+    // `inputs` is the compiled ed.inputs array at validate-time — used to
+    // resolve a validateResults[].stack.location entry back to the specific
+    // parameter it's complaining about, since the server never names it
+    // directly ("参数值错误" alone gives no clue which of N parameters failed).
+    async function callValidateApi(bodyStr, inputs) {
         try {
             const resp = await fetch(`${window.location.origin}/editor/api/site/3d?prodcatid=${CONFIG.PRODCATID}&compress=false`, {
                 method: 'POST', credentials: 'include',
@@ -1092,7 +1116,19 @@
             let data;
             try { data = JSON.parse(text); } catch (e) { return { ok: false, msg: `Validation endpoint returned non-JSON (status ${resp.status}): ${text.slice(0, 200)}` }; }
             if (Array.isArray(data.validateResults) && data.validateResults.some(r => r.type === 1)) {
-                const msgs = data.validateResults.filter(r => r.type === 1).map(r => r.info || r.message || JSON.stringify(r));
+                const msgs = data.validateResults.filter(r => r.type === 1).map(r => {
+                    let paramName = null;
+                    if (r.stack && Array.isArray(r.stack.location)) {
+                        r.stack.location.forEach(l => {
+                            if (l.fieldName === 'inputs' && l.index !== undefined && inputs && inputs[l.index]) {
+                                paramName = inputs[l.index].paramName;
+                            }
+                        });
+                    }
+                    const raw = r.info || r.message || JSON.stringify(r);
+                    const translated = translateServerMsg(raw);
+                    return paramName ? `[${paramName}] ${translated}` : translated;
+                });
                 return { ok: false, msg: `Server validation failed: ${msgs.join('; ')}` };
             }
             return { ok: true };
