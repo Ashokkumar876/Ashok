@@ -40,7 +40,7 @@
     };
 
     let currentTask = null;
-    let parsedData = null;      // Map<serial, row[]> (row = single object for QUOTE)
+    let parsedData = null; // Map<serial, row[]> (row = single object for QUOTE)
     let preValidationErrors = [];
     let lastRunErrors = [];
 
