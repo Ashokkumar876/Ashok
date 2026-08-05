@@ -102,6 +102,20 @@
             if (/^[a-zA-Z0-9]{12,24}$/.test(v)) return { obsBrandGoodId: v, versionId: 0 };
             return v;
         },
+        // float2 values are stored as a {"x":...,"y":...} JSON string (see
+        // CZPY/CZCC in the reference editorData) — accepts either an "x,y"
+        // pair or an already-JSON value from the CSV.
+        formatFloat2: (val) => {
+            if (val === null || val === undefined || val === "") return val;
+            const trimmed = String(val).trim();
+            if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                try { JSON.parse(trimmed); return trimmed; } catch (e) { /* fall through to pair parsing */ }
+            }
+            const parts = trimmed.split(",");
+            const x = (parts[0] && parts[0].trim()) ? parts[0].trim() : "0";
+            const y = (parts[1] && parts[1].trim()) ? parts[1].trim() : "0";
+            return JSON.stringify({ x, y });
+        },
         // RFC 4180 CSV parser (handles quoted fields with embedded commas/newlines).
         parseCSV: (text) => {
             let c = '', rows = [], q = false, row = [''];
@@ -706,7 +720,9 @@
         input.paramTypeId = paramTypeId;
 
         if (row.value !== '') {
-            input.value = isAsset ? Utils.wrapAsset(row.value) : row.value;
+            if (isAsset) input.value = Utils.wrapAsset(row.value);
+            else if (pType === 'float2') input.value = Utils.formatFloat2(row.value);
+            else input.value = row.value;
         }
 
         if (isAsset) {
