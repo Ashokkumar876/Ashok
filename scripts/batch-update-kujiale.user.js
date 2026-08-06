@@ -739,15 +739,31 @@
         }
     }
 
+    // Present even in a bare/default model with an empty paramNames array —
+    // never auto-delete this one just because it has 0 members.
+    function isSystemDefaultGroup(name) {
+        return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim() === 'custom parameters';
+    }
+
+    // Removes refName from whichever group(s) currently list it, then drops
+    // any group left with 0 members (except the system default) — an empty
+    // group otherwise lingers in customParamGroups[] forever, which is why
+    // deleted parameters' group folders stayed visible (just empty) in the UI.
+    function removeFromAllGroups(ed, refName) {
+        if (!ed.customParamGroups) return;
+        ed.customParamGroups.forEach(g => {
+            const i = (g.paramNames || []).indexOf(refName);
+            if (i !== -1) g.paramNames.splice(i, 1);
+        });
+        ed.customParamGroups = ed.customParamGroups.filter(g => g.paramNames.length > 0 || isSystemDefaultGroup(g.groupName));
+    }
+
     // "Grouping" maps to the top-level editorData.customParamGroups[] array,
     // not to input.groupTypeId — confirmed from a real editorData sample.
     function applyGrouping(ed, refName, groupName) {
         if (!groupName) return;
         if (!ed.customParamGroups) ed.customParamGroups = [];
-        ed.customParamGroups.forEach(g => {
-            const i = (g.paramNames || []).indexOf(refName);
-            if (i !== -1) g.paramNames.splice(i, 1);
-        });
+        removeFromAllGroups(ed, refName);
         let target = ed.customParamGroups.find(g => g.groupName === groupName);
         if (!target) { target = { groupName, paramNames: [] }; ed.customParamGroups.push(target); }
         if (!target.paramNames.includes(refName)) target.paramNames.push(refName);
@@ -1119,6 +1135,7 @@
             if (ed.outputConfig && Array.isArray(ed.outputConfig.productionParams)) {
                 ed.outputConfig.productionParams = ed.outputConfig.productionParams.filter(p => !names.has(p.paramName));
             }
+            names.forEach(n => removeFromAllGroups(ed, n));
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
