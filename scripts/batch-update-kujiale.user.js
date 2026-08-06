@@ -1230,13 +1230,26 @@
         instance.uniqueId = generateUniqueId();
         instance.instanceId = nextInstanceId(ed);
         if (row.partName) instance.name = row.partName;
-        // Reference name is optional (confirmed) — only overwrite when the
-        // CSV supplies one; otherwise leave it as the import response gave
-        // it (null).
-        if (row.partRefName) instance.refName = row.partRefName;
+        // Reference name is optional per row (confirmed) — but leaving it
+        // as the import response's literal null broke on a real run when
+        // several blank-refName rows landed in the SAME save: server
+        // rejected it as "part reference name duplicate" (多 null 视为重复).
+        // Pre-existing null-refName parts in a model are fine — those were
+        // each saved one at a time — but multiple simultaneous nulls in one
+        // save batch are not. Fall back to a name-derived, batch-unique
+        // value instead of leaving it null.
+        instance.refName = row.partRefName || deriveFallbackPartRefName(row.partName, instance.instanceId);
 
         if (!ed.modelInstances) ed.modelInstances = [];
         ed.modelInstances.push(instance);
+    }
+
+    // Alphanumeric/underscore only, matching the paramName convention used
+    // elsewhere — suffixed with instanceId (already guaranteed unique per
+    // model) so two rows with the same Part Name can't collide either.
+    function deriveFallbackPartRefName(partName, instanceId) {
+        const base = String(partName || 'PART').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 16) || 'PART';
+        return `${base}_${instanceId}`;
     }
 
     function checkDeletionDependencies(ed, rows) {
