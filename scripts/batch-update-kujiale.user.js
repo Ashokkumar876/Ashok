@@ -1112,6 +1112,13 @@
             if (depErr) return { ok: false, msg: depErr };
             const names = new Set(data.map(r => r.refName));
             ed.inputs = (ed.inputs || []).filter(inp => !names.has(inp.paramName));
+            // A deleted parameter can still have an IMOS Output Condition
+            // entry in outputConfig.productionParams[] pointing at it —
+            // left behind, the server rejects the save as a dangling
+            // output-mapping reference ("数据输出设置错误").
+            if (ed.outputConfig && Array.isArray(ed.outputConfig.productionParams)) {
+                ed.outputConfig.productionParams = ed.outputConfig.productionParams.filter(p => !names.has(p.paramName));
+            }
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
