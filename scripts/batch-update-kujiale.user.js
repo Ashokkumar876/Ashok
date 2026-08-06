@@ -213,8 +213,10 @@
         integer: ['options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
         int: ['options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
         float2: ['unlimited', 'advanced formula', 'formula'],
-        text: ['unlimited', 'options', 'advanced formula', 'formula', 'fixed value'],
-        string: ['unlimited', 'options', 'advanced formula', 'formula', 'fixed value'],
+        // Text shares the same set as Float/Integer, minus Range only —
+        // Interval IS allowed for Text (confirmed; not a guess).
+        text: ['unlimited', 'options', 'interval', 'advanced formula', 'formula', 'fixed value'],
+        string: ['unlimited', 'options', 'interval', 'advanced formula', 'formula', 'fixed value'],
         boolean: ['unlimited', 'fixed value'],
         'multiple boolean values': ['unlimited', 'fixed value'],
         booleanlist: ['unlimited', 'fixed value'],

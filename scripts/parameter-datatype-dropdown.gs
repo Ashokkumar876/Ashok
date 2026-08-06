@@ -159,7 +159,7 @@ const PARAM_TYPE_CANONICAL = ['Float', 'Float2', 'Integer', 'Text', 'Boolean', '
 const TYPE_DATATYPE_MAP = {
   'float':                   ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
   'integer':                 ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
-  'text':                    ['Unlimited', 'Options', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'text':                    ['Unlimited', 'Options', 'Interval', 'Advanced Formula', 'Formula', 'Fixed Value'],
   'float2':                  ['Unlimited', 'Advanced Formula', 'Formula'],
   'boolean':                 ['Unlimited', 'Fixed Value'],
   'multiple boolean values': ['Unlimited', 'Fixed Value'],
