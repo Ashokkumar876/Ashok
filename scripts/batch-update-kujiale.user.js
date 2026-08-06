@@ -855,14 +855,30 @@
     // That response — not a bare globalId — is what actually carries
     // valueType/paramTypeId/editorOptions/min/max/step/link/ignore; those
     // are NOT reconstructable from the CSV and must come from this lookup.
+    // The "Import Global Parameter" dialog's own network call always uses an
+    // empty `query` (it lists everything and presumably filters client-side
+    // as you type) — passing a non-empty query, as an earlier version of
+    // this function did, 404'd. Match the confirmed-working shape exactly:
+    // empty query, paginate with `start`/`num`, filter by paramName locally.
     async function fetchGlobalParamDef(paramName, obsLibraryId) {
         const origin = window.location.origin;
-        const url = `${origin}/editor/api/site/globalinput/new?start=0&num=10&query=${encodeURIComponent(paramName)}&excludevaluetypes=&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
-        const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*', 'editor-locale': 'zh_CN' } });
-        if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status} (url: ${url})`);
-        const json = await resp.json();
-        const list = (json.d && json.d.inputs) || [];
-        return list.find(x => x.paramName === paramName) || null;
+        const pageSize = 50;
+        let start = 0;
+        let totalCount = Infinity;
+        while (start < totalCount) {
+            const url = `${origin}/editor/api/site/globalinput/new?start=${start}&num=${pageSize}&query=&excludevaluetypes=&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
+            const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*', 'editor-locale': 'zh_CN' } });
+            if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status} (url: ${url})`);
+            const json = await resp.json();
+            const d = json.d || {};
+            const list = d.inputs || [];
+            const match = list.find(x => x.paramName === paramName);
+            if (match) return match;
+            totalCount = d.totalCount != null ? d.totalCount : list.length;
+            if (list.length === 0) break;
+            start += pageSize;
+        }
+        return null;
     }
 
     // Returns an error string on failure, or undefined on success — the
