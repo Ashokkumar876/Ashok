@@ -858,8 +858,8 @@
     async function fetchGlobalParamDef(paramName, obsLibraryId) {
         const origin = window.location.origin;
         const url = `${origin}/editor/api/site/globalinput/new?start=0&num=10&query=${encodeURIComponent(paramName)}&excludevaluetypes=&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
-        const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*' } });
-        if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status}`);
+        const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*', 'editor-locale': 'zh_CN' } });
+        if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status} (url: ${url})`);
         const json = await resp.json();
         const list = (json.d && json.d.inputs) || [];
         return list.find(x => x.paramName === paramName) || null;
@@ -898,8 +898,12 @@
             if (def.ignore !== undefined) input.ignore = def.ignore;
 
             // CSV values, when supplied, override the catalog defaults.
+            // globalId is NOT overridable here on purpose — it's resolved
+            // authoritatively from the live lookup by Parameter Name, and a
+            // stale/wrong CSV value could silently point it at the wrong
+            // global parameter. Parameter Name is the only identifier that
+            // matters; the Global Parameter ID column is no longer read.
             if (row.displayName) input.displayName = row.displayName;
-            if (row.globalId) input.globalId = row.globalId;
             if (row.value !== '') input.value = row.value;
             if (row.hideCondition) input.ignore = Utils.normalizeExpr(row.hideCondition);
 
