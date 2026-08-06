@@ -1,11 +1,17 @@
 /**
- * Parameter Add tools: (1) cascading Data type dropdown, (2) full pre-
- * validation with color-coded highlighting, ported 1:1 from the
- * Tampermonkey batch-update script's validateParamEditRows() so "red"
- * here means the exact same thing as "would block Run" there.
+ * Parameter Add tools:
+ *   (1) cascading Data type dropdown
+ *   (2) full pre-validation with color-coded highlighting, ported 1:1 from
+ *       the Tampermonkey batch-update script's validateParamEditRows() so
+ *       "red" here means the exact same thing as "would block Run" there
+ *   (3) live "which fields do I need to fill" highlighting — as soon as
+ *       you pick a Parameter type + Data type (and Composite type / Range
+ *       Type / Expression Type where relevant), every field that combo
+ *       requires and is still empty lights up blue, and clears itself the
+ *       moment you fill it in
  *
  * This ONE file replaces any previous version — paste over the whole
- * script project (both features share column-resolution helpers and
+ * script project (all three features share column-resolution helpers and
  * there can only be one onEdit/onOpen per project, so they must live
  * together).
  *
@@ -14,7 +20,8 @@
  * ---------------------------------------------------------------------
  * RED   (#f4c7c3) — hard error. Ported directly from an addErr() call in
  *         the userscript — if you ran this row through the batch update
- *         today, it would fail pre-validation there too.
+ *         today, it would fail pre-validation there too. Set only by
+ *         Validate Sheet.
  * YELLOW (#fce8b2) — format/style warning. The userscript still accepts
  *         these (it trims whitespace and lowercases enum comparisons
  *         before checking), but they're messy and worth cleaning up:
@@ -23,8 +30,15 @@
  *             Options, Outside/Within, Reference/Condition, Global/Local,
  *             a Parameter type or Data type name) that matches case-
  *             insensitively but not in the standard casing
- * These are the only two colors used, matching Sheets' own built-in
- * "Format cells if" red/yellow presets so it looks native.
+ *         Set only by Validate Sheet.
+ * BLUE  (#c9daf8) — live "needs a value" hint, set automatically by
+ *         onEdit as you type. Not a correctness check — just marks which
+ *         cells matter for your current Parameter type / Data type combo
+ *         and are still blank. Clears itself once filled, and never
+ *         overwrites a red/yellow cell (Validate Sheet owns those).
+ * Red and yellow match Sheets' own built-in "Format cells if" presets so
+ * they look native; blue is a separate, deliberately different hue so the
+ * three meanings never get confused at a glance.
  *
  * ---------------------------------------------------------------------
  * USE
@@ -34,9 +48,11 @@
  * fresh load, or Run > onOpen once from the Apps Script editor).
  *
  * A "Parameter Tools" menu appears with:
- *   - Validate Sheet (Highlight Errors)   — runs the full check below
- *   - Clear Validation Highlights         — wipes backgrounds/notes
- *   - Rebuild Data Type Dropdown          — re-seeds the cascading list
+ *   - Validate Sheet (Highlight Errors)      — runs the full red/yellow check
+ *   - Clear Validation Highlights            — wipes backgrounds/notes
+ *   - Rebuild Data Type Dropdown             — re-seeds the cascading list
+ *   - Highlight Required Fields (All Rows)   — backfills blue hints on
+ *     rows you filled in before installing (new edits get it live)
  *
  * Validate Sheet resets the ENTIRE data range's background color before
  * reapplying highlights — don't use cell background color in this sheet
@@ -50,6 +66,13 @@
 const DATA_SHEET_NAME = 'Parameter Add';
 const COLOR_ERROR = '#f4c7c3';
 const COLOR_WARNING = '#fce8b2';
+// Light blue — "this field matters for the Parameter type / Data type you
+// just picked, and it's currently empty." Distinct from red/yellow on
+// purpose: it's live-as-you-type guidance, not a correctness check. Once
+// you fill the cell it clears itself; it never overwrites a cell already
+// colored red/yellow by Validate Sheet (those are left for Validate Sheet /
+// Clear Validation Highlights to manage).
+const COLOR_REQUIRED = '#c9daf8';
 
 // Header text this script looks for -> internal key. Matched case- and
 // whitespace-insensitively via normHeader(). First matching alias wins.
@@ -140,6 +163,7 @@ function onOpen() {
     .addItem('Validate Sheet (Highlight Errors)', 'validateParameterSheet')
     .addItem('Clear Validation Highlights', 'clearValidationHighlights')
     .addItem('Rebuild Data Type Dropdown', 'setupDataTypeDropdown')
+    .addItem('Highlight Required Fields (All Rows)', 'highlightRequiredFieldsAll')
     .addToUi();
 }
 
@@ -192,6 +216,130 @@ function setupDataTypeDropdown() {
   }
 }
 
+// =========================================================================
+// LIVE "WHICH FIELDS DO I NEED TO FILL" HIGHLIGHTING
+// =========================================================================
+// Mirrors the exact same "if (!field) ..." requiredness rules used inside
+// validateParameterSheet() below (min/max for Range/Interval, Composite
+// type + Value relationships for non-asset Advanced Formula, Range Type
+// for asset Options/Advanced Formula, Expression for Formula/Advanced
+// Formula, Options when the combo routes through Options, etc.) — so the
+// live blue hint and the red error you'd get from Validate Sheet always
+// agree on what counts as required.
+function computeRequiredKeys(ctx) {
+  const pType = ctx.pType, dType = ctx.dType, compositeType = ctx.compositeType,
+        materialRange = ctx.materialRange, expressionType = ctx.expressionType,
+        isGlobalRow = ctx.isGlobalRow;
+
+  const req = {};
+  req.serial = true; req.paramName = true; req.displayName = true; req.grouping = true;
+  if (isGlobalRow) return req;
+
+  req.paramType = true;
+  req.dataType = true;
+  if (!pType || !dType) return req;
+
+  const isAsset = ASSET_TYPES.indexOf(pType) !== -1;
+
+  if (!isAsset && (dType === 'range' || dType === 'interval')) {
+    req.min = true; req.max = true;
+  }
+  if (!isAsset && dType === 'advanced formula') {
+    req.compositeType = true;
+    req.valueRelationship = true;
+    if (compositeType === 'range') { req.min = true; req.max = true; }
+    if (compositeType === 'options') req.options = true;
+    req.expression = true;
+  }
+  if (isAsset && (dType === 'options' || dType === 'advanced formula')) {
+    req.materialRange = true;
+  }
+  if (isAsset && (dType === 'formula' || dType === 'advanced formula')) {
+    req.expressionType = true;
+  }
+  if (dType === 'advanced formula') {
+    req.defaultState = true;
+  }
+  if (dType === 'formula') {
+    req.expression = true;
+  }
+  if (isAsset && dType === 'advanced formula' && expressionType) {
+    req.expression = true;
+  }
+  if (!isAsset && dType === 'options') {
+    req.options = true;
+  }
+  if (isAsset) {
+    const usesLink = dType === 'options' || (dType === 'advanced formula' && materialRange);
+    if (usesLink) req.options = true;
+  }
+  return req;
+}
+
+const REQUIRED_MANAGED_KEYS = ['serial', 'paramName', 'displayName', 'grouping', 'paramType', 'dataType',
+  'min', 'max', 'compositeType', 'valueRelationship', 'materialRange', 'expressionType', 'defaultState',
+  'expression', 'options'];
+
+function applyRequiredHighlight(sheet, row, cols, lastCol) {
+  lastCol = lastCol || sheet.getLastColumn();
+  const rowRange = sheet.getRange(row, 1, 1, lastCol);
+  const values = rowRange.getValues()[0];
+  const backgrounds = rowRange.getBackgrounds()[0];
+
+  function val(key) {
+    const col = cols[key];
+    if (!col) return '';
+    const v = values[col - 1];
+    return (v === null || v === undefined) ? '' : String(v).trim();
+  }
+
+  const paramCategory = val('paramCategory');
+  const globalId = val('globalId');
+  const isGlobalRow = paramCategory.toLowerCase() === 'global' || !!globalId;
+
+  const required = computeRequiredKeys({
+    pType: val('paramType').toLowerCase(),
+    dType: val('dataType').toLowerCase(),
+    compositeType: val('compositeType').toLowerCase(),
+    materialRange: val('materialRange').toLowerCase(),
+    expressionType: val('expressionType').toLowerCase(),
+    isGlobalRow: isGlobalRow
+  });
+
+  let changed = false;
+  REQUIRED_MANAGED_KEYS.forEach(function (key) {
+    const col = cols[key];
+    if (!col) return;
+    const i = col - 1;
+    const currentBg = backgrounds[i] || '#ffffff';
+    if (currentBg !== '#ffffff' && currentBg !== COLOR_REQUIRED) return; // owned by Validate Sheet — leave alone
+
+    const isEmpty = val(key) === '';
+    if (required[key] && isEmpty) {
+      if (currentBg !== COLOR_REQUIRED) { backgrounds[i] = COLOR_REQUIRED; changed = true; }
+    } else if (currentBg === COLOR_REQUIRED) {
+      backgrounds[i] = '#ffffff';
+      changed = true;
+    }
+  });
+
+  if (changed) rowRange.setBackgrounds([backgrounds]);
+}
+
+/** Run once to backfill live required-field highlighting on rows that already have data. */
+function highlightRequiredFieldsAll() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(DATA_SHEET_NAME);
+  if (!sheet) throw new Error('Sheet "' + DATA_SHEET_NAME + '" not found.');
+  const cols = resolveColumns(sheet);
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return;
+  for (let row = 2; row <= lastRow; row++) {
+    applyRequiredHighlight(sheet, row, cols, lastCol);
+  }
+}
+
 function onEdit(e) {
   const sheet = e.range.getSheet();
   if (sheet.getName() !== DATA_SHEET_NAME) return;
@@ -206,10 +354,11 @@ function onEdit(e) {
   const startCol = e.range.getColumn();
   const endCol = startCol + e.range.getNumColumns() - 1;
   const touchedParamType = cols.paramType >= startCol && cols.paramType <= endCol;
-  if (!touchedParamType) return;
+  const lastCol = sheet.getLastColumn();
 
   for (let row = startRow; row <= endRow; row++) {
-    applyDataTypeValidation(sheet, row, cols);
+    if (touchedParamType) applyDataTypeValidation(sheet, row, cols);
+    applyRequiredHighlight(sheet, row, cols, lastCol);
   }
 }
 
