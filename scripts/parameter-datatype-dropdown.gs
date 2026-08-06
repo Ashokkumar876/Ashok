@@ -558,6 +558,13 @@ function validateRowCore(field, issues, duplicateTracker) {
         err('expression', `Expression must be a JSON {"cases":[...],"defaultValue":...} block for Expression Type = Condition: ${e.message}`);
       }
     }
+    // Sheet-only check (see header comment): a "Reference" expression is a
+    // pointer to another parameter (e.g. "#CZ", "#Style_Unlimited") — every
+    // real example uses a leading # (or @). Flags plain text typed in by
+    // mistake instead of an actual reference.
+    if (expressionType === 'reference' && expressionRaw && !/^[#@]/.test(expressionRaw.trim())) {
+      err('expression', `Reference expression should start with '#' or '@' (e.g. '#CZ') — got '${expressionRaw}'.`);
+    }
   }
 
   if (!isAsset && expressionRaw && expressionRaw.trim().indexOf('{') === 0) {
