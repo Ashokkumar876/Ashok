@@ -1217,6 +1217,17 @@
     // confirmed schema, so it can't serve as a lookup key), so every row
     // pushes a new modelInstances entry.
     async function compilePartEditRow(ed, row) {
+        // Reproduced on a real run: re-importing a CSV that includes a part
+        // already added to this model (from an earlier run, or a repeated
+        // row in this same CSV) silently pushed a SECOND modelInstances
+        // entry with the same refName — server rejected the save as
+        // "instanceId重复或为空; 部件引用名重复". Checked up front (cheap,
+        // no network call) against both pre-existing parts AND ones already
+        // pushed earlier in this same run.
+        if (row.partRefName && (ed.modelInstances || []).some(mi => mi.refName === row.partRefName)) {
+            return `Reference name '${row.partRefName}' already exists on a part in this model — remove this row if it's already added, or use a different Reference name.`;
+        }
+
         const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
         let def;
         try {
