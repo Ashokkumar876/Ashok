@@ -58,14 +58,33 @@
  *   - Validate Sheet (Highlight Errors)   — full-sheet check + duplicate
  *     detection + writes/refreshes the "Validation Log" tab
  *   - Clear Validation Highlights         — wipes backgrounds/notes
- *   - Rebuild Data Type Dropdown          — re-seeds the cascading list
- *   - Refresh Live Highlights (All Rows)  — backfills live red/yellow on
- *     rows you filled in before installing (new edits get it live from
- *     here on, automatically)
+ *   - Refresh All Rows (Dropdown + Highlights) — backfills the cascading
+ *     dropdown and live red/yellow on rows you filled in before
+ *     installing (new edits get both live from here on, automatically)
  *
  * Both Validate Sheet and live editing reset backgrounds/notes on the
  * cells they manage before reapplying — don't use cell background color
  * in this sheet for anything else, it'll get overwritten.
+ *
+ * ---------------------------------------------------------------------
+ * SHEET-ONLY ADVISORY RULE (beyond the ported set)
+ * ---------------------------------------------------------------------
+ * One yellow warning is NOT ported from the userscript: a Fixed Value or
+ * Unlimited row with no Value filled in. The userscript's own compiler
+ * (compileParamEditRow) only sets input.value when the CSV Value cell is
+ * non-empty — if it's blank, it silently keeps the skeleton default
+ * (effectively empty/0) rather than erroring. So this is deliberately a
+ * WARNING, not an error: almost certainly a mistake worth flagging, but
+ * not something the batch script itself will reject.
+ *
+ * ---------------------------------------------------------------------
+ * PERFORMANCE
+ * ---------------------------------------------------------------------
+ * Column resolution (matching your headers to the fields above) is
+ * cached per document for 5 minutes via CacheService, instead of
+ * re-scanning the header row on every single keystroke — that scan was
+ * the actual source of the lag, not the dropdown itself. The cache is
+ * invalidated automatically whenever you edit row 1 (the headers).
  */
 
 const DATA_SHEET_NAME = 'Parameter Add';
@@ -102,7 +121,7 @@ const FIELDS = {
 // reset/rewrite on each live pass and each full Validate Sheet pass.
 const VALIDATED_KEYS = ['serial', 'paramName', 'displayName', 'grouping', 'paramCategory', 'imosOutputCondition',
   'paramType', 'dataType', 'value', 'min', 'max', 'compositeType', 'valueRelationship', 'materialRange',
-  'expressionType', 'defaultState', 'expression', 'options', 'hideCondition', 'lockedCondition'];
+  'expressionType', 'defaultState', 'expression', 'options', 'hideCondition', 'lockedCondition']; // 'value' included for the Fixed Value/Unlimited advisory above
 
 const PARAM_TYPE_CANONICAL = ['Float', 'Float2', 'Integer', 'Text', 'Boolean', 'Multiple boolean values', 'Material', 'Contour', 'Style'];
 
@@ -143,13 +162,32 @@ function findColumn(headerMap, aliases) {
   return null;
 }
 
+const COL_CACHE_KEY = 'paramAddColMap_v1';
+
 function resolveColumns(sheet) {
+  const cache = CacheService.getDocumentCache();
+  if (cache) {
+    const cached = cache.get(COL_CACHE_KEY);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { /* corrupt cache entry — fall through and recompute */ }
+    }
+  }
+
   const headerMap = getHeaderMap(sheet);
   const cols = {};
   for (const key in FIELDS) {
     cols[key] = findColumn(headerMap, FIELDS[key]);
   }
+
+  if (cache) {
+    try { cache.put(COL_CACHE_KEY, JSON.stringify(cols), 300); } catch (e) { /* cache write failed — harmless, just recomputes next time */ }
+  }
   return cols;
+}
+
+function invalidateColumnCache() {
+  const cache = CacheService.getDocumentCache();
+  if (cache) cache.remove(COL_CACHE_KEY);
 }
 
 function checkParens(str) {
@@ -166,58 +204,8 @@ function onOpen() {
     .createMenu('Parameter Tools')
     .addItem('Validate Sheet (Highlight Errors)', 'validateParameterSheet')
     .addItem('Clear Validation Highlights', 'clearValidationHighlights')
-    .addItem('Rebuild Data Type Dropdown', 'setupDataTypeDropdown')
-    .addItem('Refresh Live Highlights (All Rows)', 'refreshLiveHighlightsAll')
+    .addItem('Refresh All Rows (Dropdown + Highlights)', 'refreshAllRows')
     .addToUi();
-}
-
-// =========================================================================
-// CASCADING DATA TYPE DROPDOWN
-// =========================================================================
-function applyDataTypeValidation(sheet, row, cols) {
-  const dataTypeCell = sheet.getRange(row, cols.dataType);
-  const paramType = String(sheet.getRange(row, cols.paramType).getValue()).trim();
-
-  if (!paramType) {
-    dataTypeCell.clearDataValidations();
-    dataTypeCell.setNote(null);
-    return;
-  }
-
-  const validTypes = TYPE_DATATYPE_MAP[paramType.toLowerCase()];
-  if (!validTypes) {
-    dataTypeCell.clearDataValidations();
-    dataTypeCell.setNote('Unknown Parameter type "' + paramType + '" — not in TYPE_DATATYPE_MAP in the Apps Script.');
-    return;
-  }
-
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(validTypes, true)
-    .setAllowInvalid(false)
-    .build();
-  dataTypeCell.setDataValidation(rule);
-  dataTypeCell.setNote(null);
-
-  const current = String(dataTypeCell.getValue()).trim();
-  if (current && validTypes.indexOf(current) === -1) {
-    dataTypeCell.setValue('');
-  }
-}
-
-function setupDataTypeDropdown() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(DATA_SHEET_NAME);
-  if (!sheet) throw new Error('Sheet "' + DATA_SHEET_NAME + '" not found.');
-
-  const cols = resolveColumns(sheet);
-  if (!cols.paramType || !cols.dataType) {
-    throw new Error('Could not find "Parameter type" and/or "Data type" columns by header text.');
-  }
-
-  const lastRow = Math.max(sheet.getLastRow(), 2);
-  for (let row = 2; row <= lastRow; row++) {
-    applyDataTypeValidation(sheet, row, cols);
-  }
 }
 
 // =========================================================================
@@ -310,6 +298,13 @@ function validateRowCore(field, issues, duplicateTracker) {
   }
   if (['float', 'integer'].indexOf(pType) !== -1 && dType === 'fixed value' && value && isNaN(Number(value))) {
     err('value', `Numeric value expected, got '${value}'.`);
+  }
+  // Sheet-only advisory (not ported from the userscript, see header comment):
+  // Fixed Value / Unlimited with no Value is almost always a mistake, even
+  // though the batch script itself tolerates it and falls back to a blank/0
+  // default.
+  if ((dType === 'fixed value' || dType === 'unlimited') && !value) {
+    warn('value', `No Value set for ${dType === 'fixed value' ? 'Fixed Value' : 'Unlimited'} — the batch script will still run (it falls back to an empty/zero default), but this is almost always meant to have one.`);
   }
 
   if (!isAsset && (dType === 'range' || dType === 'interval')) {
@@ -443,19 +438,60 @@ function validateRowCore(field, issues, duplicateTracker) {
 }
 
 // =========================================================================
-// LIVE VALIDATION (runs on every edit, scoped to the row(s) touched)
+// UNIFIED PER-ROW PASS: cascading Data type dropdown + live red/yellow
+// validation, in ONE batched read/write cycle (this is what used to be
+// two separate functions each doing their own getRange calls — merged to
+// cut the per-edit round-trip count roughly in half, since that overhead,
+// not the dropdown itself, was the actual source of the lag).
 // =========================================================================
-function liveValidateRow(sheet, row, cols, lastCol) {
+function processRow(sheet, row, cols, lastCol) {
   lastCol = lastCol || sheet.getLastColumn();
   const rowRange = sheet.getRange(row, 1, 1, lastCol);
   const values = rowRange.getValues()[0];
+  const backgrounds = rowRange.getBackgrounds()[0];
+  const notes = rowRange.getNotes()[0];
+  const validations = rowRange.getDataValidations()[0];
+  let valuesChanged = false;
 
+  function cellStr(colKey) {
+    const col = cols[colKey];
+    if (!col) return '';
+    const v = values[col - 1];
+    return (v === null || v === undefined) ? '' : String(v);
+  }
+
+  // --- Cascading Data type dropdown ---
+  if (cols.dataType && cols.paramType) {
+    const paramType = cellStr('paramType').trim();
+    const dtIdx = cols.dataType - 1;
+    if (!paramType) {
+      validations[dtIdx] = null;
+      notes[dtIdx] = '';
+      // Clearing Parameter type used to leave a stale Data type VALUE
+      // behind (only the dropdown rule/note got cleared) — that stale
+      // value then kept tripping downstream "Minimum is required for
+      // Range" style errors even though Parameter type was blank again.
+      if (cellStr('dataType').trim() !== '') { values[dtIdx] = ''; valuesChanged = true; }
+    } else {
+      const validTypes = TYPE_DATATYPE_MAP[paramType.toLowerCase()];
+      if (!validTypes) {
+        validations[dtIdx] = null;
+        notes[dtIdx] = 'Unknown Parameter type "' + paramType + '" — not in TYPE_DATATYPE_MAP in the Apps Script.';
+      } else {
+        validations[dtIdx] = SpreadsheetApp.newDataValidation().requireValueInList(validTypes, true).setAllowInvalid(false).build();
+        const current = cellStr('dataType').trim();
+        if (current && validTypes.indexOf(current) === -1) { values[dtIdx] = ''; valuesChanged = true; }
+      }
+    }
+  }
+
+  // --- Live red/yellow validation (reads the SAME in-memory values, so it
+  // sees the just-cleared Data type immediately rather than a stale read) ---
   const rowIssues = [];
   function field(colKey) {
     const col = cols[colKey];
     if (!col) return '';
-    const raw = values[col - 1];
-    const str = (raw === null || raw === undefined) ? '' : String(raw);
+    const str = cellStr(colKey);
     const trimmed = str.trim();
     if (str !== trimmed && trimmed !== '') {
       rowIssues.push({ colKey: colKey, severity: 'warning', msg: 'Leading/trailing whitespace — values are trimmed automatically so this still works, but tidy it up if you can.' });
@@ -466,14 +502,11 @@ function liveValidateRow(sheet, row, cols, lastCol) {
   // sheet, not just this row. Validate Sheet is the authority for that.
   validateRowCore(field, rowIssues, null);
 
-  const backgrounds = rowRange.getBackgrounds()[0];
-  const notes = rowRange.getNotes()[0];
-
   VALIDATED_KEYS.forEach(function (key) {
     const col = cols[key];
     if (!col) return;
     backgrounds[col - 1] = '#ffffff';
-    notes[col - 1] = '';
+    if (key !== 'dataType') notes[col - 1] = ''; // dataType's note is owned by the dropdown block above
   });
 
   const cellSeverity = {};
@@ -490,27 +523,38 @@ function liveValidateRow(sheet, row, cols, lastCol) {
     backgrounds[i] = cellSeverity[i] === 'error' ? COLOR_ERROR : COLOR_WARNING;
   });
 
+  rowRange.setDataValidations([validations]);
   rowRange.setBackgrounds([backgrounds]);
   rowRange.setNotes([notes]);
+  if (valuesChanged) rowRange.setValues([values]);
 }
 
-/** Run once to backfill live validation on rows that already have data. */
-function refreshLiveHighlightsAll() {
+/** Run once to backfill the dropdown and live validation on rows that already have data. */
+function refreshAllRows() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(DATA_SHEET_NAME);
   if (!sheet) throw new Error('Sheet "' + DATA_SHEET_NAME + '" not found.');
+  invalidateColumnCache();
   const cols = resolveColumns(sheet);
+  if (!cols.paramType || !cols.dataType) {
+    throw new Error('Could not find "Parameter type" and/or "Data type" columns by header text.');
+  }
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2) return;
   for (let row = 2; row <= lastRow; row++) {
-    liveValidateRow(sheet, row, cols, lastCol);
+    processRow(sheet, row, cols, lastCol);
   }
 }
 
 function onEdit(e) {
   const sheet = e.range.getSheet();
   if (sheet.getName() !== DATA_SHEET_NAME) return;
+
+  if (e.range.getRow() === 1) {
+    invalidateColumnCache(); // headers changed — re-resolve (and re-cache) on the next data edit
+    return;
+  }
 
   const startRow = Math.max(e.range.getRow(), 2);
   const endRow = e.range.getRow() + e.range.getNumRows() - 1;
@@ -519,14 +563,9 @@ function onEdit(e) {
   const cols = resolveColumns(sheet);
   if (!cols.paramType || !cols.dataType) return;
 
-  const startCol = e.range.getColumn();
-  const endCol = startCol + e.range.getNumColumns() - 1;
-  const touchedParamType = cols.paramType >= startCol && cols.paramType <= endCol;
   const lastCol = sheet.getLastColumn();
-
   for (let row = startRow; row <= endRow; row++) {
-    if (touchedParamType) applyDataTypeValidation(sheet, row, cols);
-    liveValidateRow(sheet, row, cols, lastCol);
+    processRow(sheet, row, cols, lastCol);
   }
 }
 
@@ -544,6 +583,7 @@ function validateParameterSheet() {
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2) { ui.alert('No data rows to validate.'); return; }
 
+  invalidateColumnCache();
   const cols = resolveColumns(sheet);
 
   const requiredCols = { serial: 'Product serial number', paramName: 'Parameter Name', displayName: 'Display Name', grouping: 'Grouping' };
