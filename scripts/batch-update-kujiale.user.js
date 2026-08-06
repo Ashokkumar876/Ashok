@@ -752,6 +752,17 @@
         return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim() === 'custom parameters';
     }
 
+    // "System parameters" / "Basic parameters" are native, structural
+    // sections of Kujiale's own panel — not something reachable through
+    // customParamGroups[] at all (confirmed against a real editorData
+    // sample). A row lands there on its own once it isn't claimed by a real
+    // custom group; applyGrouping must never create a same-named entry for
+    // either, or it shows up as a duplicate empty-looking folder.
+    function isNativeGroupSection(name) {
+        const n = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        return n === 'system parameters' || n === 'basic parameters';
+    }
+
     // Removes refName from whichever group(s) currently list it, then drops
     // any group left with 0 members (except the system default) — an empty
     // group otherwise lingers in customParamGroups[] forever, which is why
@@ -771,6 +782,7 @@
         if (!groupName) return;
         if (!ed.customParamGroups) ed.customParamGroups = [];
         removeFromAllGroups(ed, refName);
+        if (isNativeGroupSection(groupName)) return;
         let target = ed.customParamGroups.find(g => g.groupName === groupName);
         if (!target) {
             // Creating a brand new group: if the empty system-default group

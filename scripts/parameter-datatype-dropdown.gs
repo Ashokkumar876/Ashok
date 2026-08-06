@@ -8,11 +8,14 @@
  *       so a required-but-empty field (e.g. Options is blank while Data
  *       type = Options) goes red immediately, not just after a manual
  *       validate pass.
+ *       Also flags duplicate Parameter Name within the same Product serial
+ *       number (one extra batched read of the serial/Parameter Name
+ *       columns per edit).
  *   (3) "Validate Sheet" menu action — the same rule set run across the
- *       WHOLE sheet at once, plus the one thing live per-row editing
- *       structurally can't catch by itself: duplicate Parameter Name
- *       within the same model (needs to see every row, not just the one
- *       you're editing). Writes a "Validation Log" tab.
+ *       WHOLE sheet at once, plus "#ref" Expression checks against every
+ *       Parameter Name in the sheet (the one thing live per-row editing
+ *       still can't do by itself — needs every row's name up front, not
+ *       just a same-serial slice). Writes a "Validation Log" tab.
  *
  * This ONE file replaces any previous version — paste over the whole
  * script project (everything shares column-resolution helpers and there
@@ -598,6 +601,29 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
   return { serial: serial, refName: refName };
 }
 
+// Same-serial duplicate Parameter Name check for the LIVE per-row path.
+// One batched two-column read of the whole sheet (not per-row getRange
+// calls), then a plain scan — cheap enough to run on every edit.
+function buildLiveDuplicateTracker(sheet, cols, currentRow) {
+  if (!cols.serial || !cols.paramName) return null;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const serials = sheet.getRange(2, cols.serial, lastRow - 1, 1).getValues();
+  const names = sheet.getRange(2, cols.paramName, lastRow - 1, 1).getValues();
+  return {
+    isDuplicate: function (serial, refName) {
+      for (let i = 0; i < serials.length; i++) {
+        const r = i + 2;
+        if (r === currentRow) continue;
+        const s = serials[i][0] === null || serials[i][0] === undefined ? '' : String(serials[i][0]).trim();
+        const n = names[i][0] === null || names[i][0] === undefined ? '' : String(names[i][0]).trim();
+        if (s === serial && n === refName) return true;
+      }
+      return false;
+    }
+  };
+}
+
 // =========================================================================
 // UNIFIED PER-ROW PASS: cascading Data type dropdown + live red/yellow
 // validation, in ONE batched read/write cycle (this is what used to be
@@ -643,6 +669,12 @@ function processRow(sheet, row, cols, lastCol) {
     const paramType = cellStr('paramType').trim();
     const dtIdx = cols.dataType - 1;
     const dtCell = sheet.getRange(row, cols.dataType);
+    // Reset every cycle — this block is Data type's note's only owner (see
+    // below), so once a bad-paramType note got written here it used to
+    // never clear again once the row was fixed, and a stale "Data type is
+    // required" note from validateRowCore's merge below (which only
+    // APPENDS, never clears this column) could pile up across edits too.
+    notes[dtIdx] = '';
     if (!paramType) {
       dtCell.clearDataValidations();
       notes[dtIdx] = '';
@@ -685,10 +717,11 @@ function processRow(sheet, row, cols, lastCol) {
   // the still-listening blank row. validateParameterSheet already skips
   // blank rows the same way; this brings the live path in line with it.
   const rowIsBlank = values.every(function (v) { return v === '' || v === null || v === undefined; });
-  // No duplicateTracker or refResolver here — both need the whole sheet's
-  // Parameter Names, not just this row. Validate Sheet is the authority
-  // for those two checks.
-  if (!rowIsBlank) validateRowCore(field, rowIssues, null, null);
+  // refResolver still needs the whole sheet's Parameter Names for #ref
+  // validation and stays Validate-Sheet-only. Duplicate Parameter Name
+  // (within the same Product serial number) is cheap enough to check live
+  // too — one extra batched read of just the serial/Parameter Name columns.
+  if (!rowIsBlank) validateRowCore(field, rowIssues, buildLiveDuplicateTracker(sheet, cols, row), null);
 
   VALIDATED_KEYS.forEach(function (key) {
     const col = cols[key];
