@@ -93,7 +93,11 @@
  * every Options entry may only carry name/value/ignore — any other key
  * (e.g. "ignor" instead of "ignore") is flagged yellow as a likely typo,
  * since a misspelled key is silently dropped by the batch script rather
- * than doing what you meant. None of this is ported from the userscript
+ * than doing what you meant. And for Range/Interval (and Advanced Formula
+ * + Composite type = Range), Value must actually fall within Minimum and
+ * Maximum — e.g. Minimum 0 / Maximum 100 / Value 101 now errors; before,
+ * only Min/Max's presence was checked, never that Value was between them.
+ * None of this is ported from the userscript
  * (which never checked Options entry value types, blankness, or key
  * names) — added because leaving these unchecked meant real data-format
  * mistakes went completely unflagged.
@@ -245,6 +249,25 @@ function checkNumericForType(v, pType, pTypeRaw) {
 // carry name/value/ignore — anything else is almost always a typo (e.g.
 // "ignor" instead of "ignore"), which the batch script would otherwise
 // silently drop instead of doing what you intended.
+// Sheet-only check (see header comment): Range/Interval means Value should
+// actually fall within Minimum..Maximum — that was never checked before,
+// only that Min/Max themselves were present. Skipped when Value or the
+// bound is a formula reference, since a dynamically-computed number can't
+// be checked at authoring time.
+function checkValueInRange(value, min, max, err) {
+  if (!value || isFormulaRef(value) || isFormulaRef(min) || isFormulaRef(max)) return;
+  const v = Number(value);
+  if (isNaN(v)) return; // already flagged by checkNumericForType
+  if (min) {
+    const lo = Number(min);
+    if (!isNaN(lo) && v < lo) err('value', `Value '${value}' is below Minimum (${min}).`);
+  }
+  if (max) {
+    const hi = Number(max);
+    if (!isNaN(hi) && v > hi) err('value', `Value '${value}' is above Maximum (${max}).`);
+  }
+}
+
 const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
 
 // Shared by both the non-asset Options branch and the Advanced Formula +
@@ -425,6 +448,7 @@ function validateRowCore(field, issues, duplicateTracker) {
   if (!isAsset && (dType === 'range' || dType === 'interval')) {
     if (!min) err('min', 'Minimum is required for Range/Interval.');
     if (!max) err('max', 'Maximum is required for Range/Interval.');
+    checkValueInRange(value, min, max, err);
   }
 
   if (!isAsset && dType === 'advanced formula') {
@@ -445,6 +469,7 @@ function validateRowCore(field, issues, duplicateTracker) {
     if (compositeType === 'range') {
       if (!min) err('min', 'Minimum is required for Advanced Formula + Range.');
       if (!max) err('max', 'Maximum is required for Advanced Formula + Range.');
+      checkValueInRange(value, min, max, err);
     }
   }
 
@@ -565,7 +590,6 @@ function processRow(sheet, row, cols, lastCol) {
   const values = rowRange.getValues()[0];
   const backgrounds = rowRange.getBackgrounds()[0];
   const notes = rowRange.getNotes()[0];
-  const validations = rowRange.getDataValidations()[0];
   let valuesChanged = false;
 
   function cellStr(colKey) {
@@ -575,12 +599,31 @@ function processRow(sheet, row, cols, lastCol) {
     return (v === null || v === undefined) ? '' : String(v);
   }
 
-  // --- Cascading Data type dropdown ---
+  // --- Cascading Data type dropdown — touches ONLY the Data type cell's
+  // own validation, via a scoped single-cell call, and NEVER reads/writes
+  // the whole row's data validations as a batch.
+  //
+  // A previous version read the whole row's validations into one array
+  // and wrote them all back together for speed. That was the actual bug
+  // behind "Chip style keeps changing to Arrow": Apps Script's
+  // DataValidation object has no property for Chip vs Arrow display (it's
+  // not part of the exposed API at all, confirmed against Google's own
+  // issue tracker) — so round-tripping ANY validation, including your
+  // manually-built Chip dropdowns on Parameter Category/Grouping/
+  // Parameter type, through getDataValidations()/setDataValidations()
+  // silently drops that attribute and it renders as Arrow again. This
+  // script never changes those columns' actual rules, but merely
+  // reading-and-rewriting them alongside Data type's own validation was
+  // enough to strip their styling on every single edit anywhere in the
+  // row. Scoping to sheet.getRange(row, cols.dataType) below means Data
+  // type is the only cell ever put through that round-trip — permanent
+  // fix, not a workaround.
   if (cols.dataType && cols.paramType) {
     const paramType = cellStr('paramType').trim();
     const dtIdx = cols.dataType - 1;
+    const dtCell = sheet.getRange(row, cols.dataType);
     if (!paramType) {
-      validations[dtIdx] = null;
+      dtCell.clearDataValidations();
       notes[dtIdx] = '';
       // Clearing Parameter type used to leave a stale Data type VALUE
       // behind (only the dropdown rule/note got cleared) — that stale
@@ -590,10 +633,10 @@ function processRow(sheet, row, cols, lastCol) {
     } else {
       const validTypes = TYPE_DATATYPE_MAP[paramType.toLowerCase()];
       if (!validTypes) {
-        validations[dtIdx] = null;
+        dtCell.clearDataValidations();
         notes[dtIdx] = 'Unknown Parameter type "' + paramType + '" — not in TYPE_DATATYPE_MAP in the Apps Script.';
       } else {
-        validations[dtIdx] = SpreadsheetApp.newDataValidation().requireValueInList(validTypes, true).setAllowInvalid(false).build();
+        dtCell.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(validTypes, true).setAllowInvalid(false).build());
         const current = cellStr('dataType').trim();
         if (current && validTypes.indexOf(current) === -1) { values[dtIdx] = ''; valuesChanged = true; }
       }
@@ -638,7 +681,6 @@ function processRow(sheet, row, cols, lastCol) {
     backgrounds[i] = cellSeverity[i] === 'error' ? COLOR_ERROR : COLOR_WARNING;
   });
 
-  rowRange.setDataValidations([validations]);
   rowRange.setBackgrounds([backgrounds]);
   rowRange.setNotes([notes]);
   if (valuesChanged) rowRange.setValues([values]);
