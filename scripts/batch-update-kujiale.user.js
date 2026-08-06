@@ -855,19 +855,32 @@
     // That response — not a bare globalId — is what actually carries
     // valueType/paramTypeId/editorOptions/min/max/step/link/ignore; those
     // are NOT reconstructable from the CSV and must come from this lookup.
-    // The "Import Global Parameter" dialog's own network call always uses an
-    // empty `query` (it lists everything and presumably filters client-side
-    // as you type) — passing a non-empty query, as an earlier version of
-    // this function did, 404'd. Match the confirmed-working shape exactly:
-    // empty query, paginate with `start`/`num`, filter by paramName locally.
+    // Captured verbatim via DevTools "Copy as fetch" from a real, successful
+    // "Import Global Parameter" dialog request — this is a POST with an
+    // empty-array body (presumably a tag-filter list; [] = unfiltered), NOT
+    // a GET as every earlier attempt here assumed. That mismatch is exactly
+    // why it 404'd at the gateway: a GET against a POST-only route. The
+    // content-type/x-qh-* headers below are likewise required, not optional.
     async function fetchGlobalParamDef(paramName, obsLibraryId) {
         const origin = window.location.origin;
-        const pageSize = 50;
+        const pageSize = 10;
         let start = 0;
         let totalCount = Infinity;
         while (start < totalCount) {
             const url = `${origin}/editor/api/site/globalinput/new?start=${start}&num=${pageSize}&query=&excludevaluetypes=&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
-            const resp = await fetch(url, { credentials: 'include', headers: { accept: '*/*', 'editor-locale': 'zh_CN' } });
+            const resp = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                mode: 'cors',
+                headers: {
+                    accept: '*/*',
+                    'content-type': 'application/json;charset=UTF-8',
+                    'editor-locale': 'en_US',
+                    'x-qh-locale': 'en_US',
+                    'x-qh-site': 'coohom'
+                },
+                body: '[]'
+            });
             if (!resp.ok) throw new Error(`globalinput lookup failed, status ${resp.status} (url: ${url})`);
             const json = await resp.json();
             const d = json.d || {};
