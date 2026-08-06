@@ -69,13 +69,16 @@
  * ---------------------------------------------------------------------
  * SHEET-ONLY ADVISORY RULE (beyond the ported set)
  * ---------------------------------------------------------------------
- * One yellow warning is NOT ported from the userscript: a Fixed Value or
- * Unlimited row with no Value filled in. The userscript's own compiler
- * (compileParamEditRow) only sets input.value when the CSV Value cell is
- * non-empty — if it's blank, it silently keeps the skeleton default
- * (effectively empty/0) rather than erroring. So this is deliberately a
- * WARNING, not an error: almost certainly a mistake worth flagging, but
- * not something the batch script itself will reject.
+ * One yellow warning is NOT ported from the userscript: any local row with
+ * no Value filled in. The userscript's own compiler (compileParamEditRow)
+ * sets input.value from the CSV Value cell whenever it's non-empty —
+ * `if (row.value !== '') input.value = row.value` — and that gate is
+ * unconditional on Data type, so Value is meaningful for essentially every
+ * Parameter type/Data type combination (Range, Options, Formula, Advanced
+ * Formula, assets — not just Fixed Value/Unlimited). Leaving it blank still
+ * runs fine (falls back to the skeleton's empty/0 default), so this is
+ * deliberately a WARNING, not an error — flagged because it's usually a
+ * mistake, not because the batch script will reject it.
  *
  * ---------------------------------------------------------------------
  * PERFORMANCE
@@ -300,11 +303,13 @@ function validateRowCore(field, issues, duplicateTracker) {
     err('value', `Numeric value expected, got '${value}'.`);
   }
   // Sheet-only advisory (not ported from the userscript, see header comment):
-  // Fixed Value / Unlimited with no Value is almost always a mistake, even
-  // though the batch script itself tolerates it and falls back to a blank/0
-  // default.
-  if ((dType === 'fixed value' || dType === 'unlimited') && !value) {
-    warn('value', `No Value set for ${dType === 'fixed value' ? 'Fixed Value' : 'Unlimited'} — the batch script will still run (it falls back to an empty/zero default), but this is almost always meant to have one.`);
+  // compileParamEditRow's actual gate is `if (row.value !== '') input.value = row.value`
+  // — unconditional on Data type, so a default Value is meaningful for every
+  // combination (Range/Options/Formula/Advanced Formula/assets included, not
+  // just Fixed Value/Unlimited). Leaving it blank still runs fine (falls back
+  // to a blank/0 skeleton default), so this stays a warning, not an error.
+  if (!value) {
+    warn('value', `No Value (default value) set for this row — the batch script will still run (it falls back to an empty/zero default), but nearly every Parameter type/Data type combination accepts and uses one, so this is usually meant to have one.`);
   }
 
   if (!isAsset && (dType === 'range' || dType === 'interval')) {
