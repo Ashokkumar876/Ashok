@@ -398,24 +398,43 @@
                 validatePartEditHeaders(idx);
             }
 
-            if (preValidationErrors.length === 0) {
+            // Header errors (missing required COLUMN) block everything —
+            // there's no well-formed row to partially salvage. Row errors
+            // are different: only the offending rows get skipped below,
+            // every clean row still runs.
+            const headerErrorCount = preValidationErrors.length;
+
+            if (headerErrorCount === 0) {
                 if (currentTask.id === 'QUOTE') validateQuoteRows(rows, idx);
                 else if (currentTask.id === 'PARAM_EDIT') validateParamEditRows(rows, idx);
                 else if (currentTask.id === 'PARAM_DEL') validateParamDelRows(rows, idx);
                 else if (currentTask.id === 'PART_EDIT') validatePartEditRows(rows, idx);
             }
 
-            if (preValidationErrors.length > 0) {
-                document.getElementById('log-text').value = `❌ Found ${preValidationErrors.length} error(s). Download report, fix, and re-import.`;
+            if (headerErrorCount > 0) {
+                document.getElementById('log-text').value = `❌ Found ${preValidationErrors.length} header error(s). Download report, fix, and re-import.`;
                 document.getElementById('error-download').style.display = 'block';
                 showNotification(`❌ ${preValidationErrors.length} validation error(s) found.`, THEME.danger);
                 parsedData = null;
             } else {
-                parsedData = buildDataMap(currentTask.id, rows, idx);
-                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.`;
-                document.getElementById('error-download').style.display = 'none';
-                runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
-                showNotification(`✅ ${parsedData.size} model(s) ready to run.`, THEME.success);
+                const errorRows = new Set(preValidationErrors.filter(e => typeof e.row === 'number').map(e => e.row));
+                parsedData = buildDataMap(currentTask.id, rows, idx, errorRows);
+                if (parsedData.size === 0) {
+                    document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.`;
+                    document.getElementById('error-download').style.display = 'block';
+                    showNotification(`❌ ${preValidationErrors.length} validation error(s) found — no valid rows.`, THEME.danger);
+                    parsedData = null;
+                } else if (errorRows.size > 0) {
+                    document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.`;
+                    document.getElementById('error-download').style.display = 'block';
+                    runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
+                    showNotification(`⚠️ ${errorRows.size} row(s) skipped (errors) — ${parsedData.size} model(s) still ready.`, THEME.warning);
+                } else {
+                    document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.`;
+                    document.getElementById('error-download').style.display = 'none';
+                    runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
+                    showNotification(`✅ ${parsedData.size} model(s) ready to run.`, THEME.success);
+                }
             }
         };
         reader.readAsText(file);
@@ -738,10 +757,12 @@
         }
     }
 
-    function buildDataMap(taskId, rows, idx) {
+    function buildDataMap(taskId, rows, idx, errorRows) {
         const map = new Map();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
+            const rowNum = i + 1;
+            if (errorRows && errorRows.has(rowNum)) continue;
             const serial = cell(row, idx.serial);
             if (!serial) continue;
 
