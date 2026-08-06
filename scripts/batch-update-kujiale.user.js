@@ -1209,18 +1209,22 @@
         return Math.random().toString(36).slice(2, 12);
     }
 
-    // instanceId must be unique across ed.modelInstances (existing ones are
-    // small, non-contiguous integers-as-strings) — assigning raw CSV row
-    // order would collide with whatever's already in the target model, so
-    // this takes the current max +1 instead. Called once per new part in
-    // CSV row order (the row's push into ed.modelInstances happens before
-    // the next row is compiled), so multiple new parts in one run still land
-    // in CSV order, just offset past whatever already exists.
+    // instanceId is NOT scoped to ed.modelInstances — confirmed on a real
+    // rejected save: frameModels[], moldingPaths[], and paramModel all carry
+    // their own "instanceId" from the SAME shared numbering space (e.g. a
+    // model's moldingPaths entries had instanceId "5"/"6" — assigning those
+    // same values to new parts, because only modelInstances[] was scanned,
+    // is exactly what triggered "instanceId重复或为空" on a live run). Scans
+    // the whole editorData tree for every instanceId, same technique as
+    // selfHealReferencedVars's JSON.stringify + regex scan below, so it
+    // stays correct regardless of which other top-level arrays turn out to
+    // share this id space.
     function nextInstanceId(ed) {
+        const matches = JSON.stringify(ed).match(/"instanceId"\s*:\s*"?(\d+)"?/g) || [];
         let max = 0;
-        (ed.modelInstances || []).forEach(mi => {
-            const n = parseInt(mi.instanceId, 10);
-            if (!isNaN(n) && n > max) max = n;
+        matches.forEach(m => {
+            const n = parseInt(m.match(/(\d+)/)[1], 10);
+            if (n > max) max = n;
         });
         return String(max + 1);
     }
