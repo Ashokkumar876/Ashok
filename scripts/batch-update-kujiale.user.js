@@ -481,6 +481,7 @@
     }
 
     function validatePartEditRows(rows, idx) {
+        const seenPerModel = new Map();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -491,6 +492,20 @@
             if (!childSerial) addErr(rowNum, serial, partName, 'Child Serial Number', 'Child Serial Number is required.');
             if (!partName) addErr(rowNum, serial, '', 'Part Name', 'Part Name is required.');
             // Reference name is optional (confirmed) — no check.
+
+            // Same Child Serial Number + Part Name repeated for the same
+            // target model — almost certainly a copy-paste duplicate row,
+            // not two intentionally-separate parts. NOTE: this only catches
+            // duplicates WITHIN the CSV itself; it can't see parts already
+            // present in the live model (that would need a network call
+            // during pre-validation, which this pass doesn't do).
+            if (serial && childSerial && partName) {
+                if (!seenPerModel.has(serial)) seenPerModel.set(serial, new Set());
+                const set = seenPerModel.get(serial);
+                const key = childSerial + '|' + partName;
+                if (set.has(key)) addErr(rowNum, serial, partName, 'Child Serial Number', `Duplicate part — Child Serial Number '${childSerial}' with Part Name '${partName}' already appears earlier in this CSV for this model.`);
+                else set.add(key);
+            }
         }
     }
 
