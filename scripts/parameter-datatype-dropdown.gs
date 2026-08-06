@@ -588,15 +588,11 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
     try { JSON.parse(expressionRaw); } catch (e) { err('expression', 'Expression contains invalid JSON.'); }
   }
 
-  [['hideCondition', hideCondition], ['min', min], ['max', max], ['expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([colKey, v]) => {
+  const lockedRaw = field('lockedCondition');
+
+  [['hideCondition', hideCondition], ['min', min], ['max', max], ['lockedCondition', lockedRaw], ['expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([colKey, v]) => {
     if (v && !checkParens(v)) err(colKey, 'Unbalanced parentheses.');
   });
-
-  const lockedRaw = field('lockedCondition');
-  const lockedVal = lockedRaw.toLowerCase();
-  if (lockedVal && ['true', 'false', 'locked'].indexOf(lockedVal) === -1) {
-    err('lockedCondition', `Invalid value '${lockedRaw}'.`);
-  }
 
   return { serial: serial, refName: refName };
 }

@@ -658,14 +658,10 @@
             if (!isAsset && expressionRaw && expressionRaw.trim().startsWith('{')) {
                 try { JSON.parse(expressionRaw); } catch (e) { addErr(rowNum, serial, refName, 'Expression', 'Expression contains invalid JSON.'); }
             }
-            [['Hide condition', hideCondition], ['Minimum', min], ['Maximum', max], ['Expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([label, val]) => {
+            const lockedCondition = cell(row, idx.lockedCondition);
+            [['Hide condition', hideCondition], ['Minimum', min], ['Maximum', max], ['Locked condition', lockedCondition], ['Expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([label, val]) => {
                 if (val && !checkParens(val)) addErr(rowNum, serial, refName, label, 'Unbalanced parentheses.');
             });
-
-            const lockedVal = cell(row, idx.lockedCondition).toLowerCase();
-            if (lockedVal && !['true', 'false', 'locked'].includes(lockedVal)) {
-                addErr(rowNum, serial, refName, 'Locked condition', `Invalid value '${cell(row, idx.lockedCondition)}'.`, "Enter true, false, or locked.");
-            }
 
             row.__optionsParsed = optionsParsed;
             row.__expressionParsed = expressionParsed;
@@ -716,6 +712,7 @@
                 materialRange: cell(row, idx.materialRange).toLowerCase(),
                 expressionType: cell(row, idx.expressionType).toLowerCase(),
                 hideCondition: cell(row, idx.hideCondition),
+                lockedCondition: cell(row, idx.lockedCondition),
                 imosOutputCondition: cell(row, idx.imosOutputCondition),
                 optionsRaw: cell(row, idx.options),
                 expressionRaw: cell(row, idx.expression),
@@ -969,6 +966,10 @@
             if (row.displayName) input.displayName = row.displayName;
             if (row.value !== '') input.value = row.value;
             if (row.hideCondition) input.ignore = Utils.normalizeExpr(row.hideCondition);
+            if (row.lockedCondition) {
+                if (!input.extAttr) input.extAttr = {};
+                input.extAttr['diy-immutable'] = { value: Utils.normalizeExpr(row.lockedCondition), displayName: null, valueType: 'boolean' };
+            }
 
             applyGrouping(ed, row.refName, row.grouping);
             applyImosOutput(ed, row.refName, row.imosOutputCondition);
@@ -1085,6 +1086,19 @@
         }
 
         if (row.hideCondition !== '') input.ignore = Utils.normalizeExpr(row.hideCondition);
+
+        // Locked condition -> extAttr['diy-immutable'] (confirmed from a
+        // real editorData sample: a locked Height had
+        // extAttr.diy-immutable = {value: "#W < 100 ? TRUE : FALSE",
+        // displayName: null, valueType: "boolean"}; an unlocked Depth had
+        // extAttr: {} — no key at all). This column was previously read for
+        // validation only and never actually written anywhere.
+        if (row.lockedCondition !== '') {
+            if (!input.extAttr) input.extAttr = {};
+            input.extAttr['diy-immutable'] = { value: Utils.normalizeExpr(row.lockedCondition), displayName: null, valueType: 'boolean' };
+        } else if (input.extAttr) {
+            delete input.extAttr['diy-immutable'];
+        }
 
         applyGrouping(ed, row.refName, row.grouping);
         applyImosOutput(ed, row.refName, row.imosOutputCondition);
