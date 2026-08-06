@@ -1,20 +1,36 @@
 /**
  * Cascading dropdown: restricts "Data type" (Parameter Add!F) to only the
  * values valid for whatever "Parameter type" (Parameter Add!E) is selected
- * on that row, read live from the Parameters DropDown tab's matrix
- * (Parameter type in column C, its valid Data types spread across D:I).
+ * on that row.
+ *
+ * The Parameter type -> Data type matrix is HARD-CODED below (TYPE_DATATYPE_MAP)
+ * instead of being read from the "Parameters DropDown" tab on every edit.
+ * Two reasons:
+ *   1. Speed — a sheet read on every keystroke was the source of the lag.
+ *   2. Correctness on drag-fill — Google Sheets fires onEdit ONCE for the
+ *      whole dragged range, not once per row. The previous version only
+ *      ever read e.range.getRow() (the first row of that range), so
+ *      dragging Parameter type down 20 rows only applied/validated row 1 —
+ *      the other 19 rows kept whatever Data type they had before, even if
+ *      it was no longer valid for the new Parameter type. Fixed below by
+ *      looping every row in e.range.
  *
  * Install: open the sheet > Extensions > Apps Script, paste this file's
  * contents, save. onEdit is a simple trigger — no manual trigger setup
- * needed, it fires automatically on any edit made by a human in the UI.
+ * needed, it fires automatically on any edit made by a human in the UI
+ * (including a fill-handle drag).
  *
  * After installing, run backfillAllDataTypeDropdowns() once (Run menu in
  * the Apps Script editor) to apply the validation to any rows you already
  * filled in before the script existed.
+ *
+ * If you ever change the valid Data types for a Parameter type, edit
+ * TYPE_DATATYPE_MAP below AND the "Parameters DropDown" tab together so
+ * they stay in sync — the tab is documentation now, the script no longer
+ * reads it.
  */
 
 const DATA_SHEET_NAME = 'Parameter Add';
-const LOOKUP_SHEET_NAME = 'Parameters DropDown';
 
 // Parameter Add columns (A=1) — matches the workbook's locked header order.
 const COL = {
@@ -22,21 +38,37 @@ const COL = {
   DATA_TYPE: 6    // F: Data type
 };
 
-// Parameters DropDown matrix — Parameter type in column C, its valid Data
-// types spread across D through I (adjust END_COL if you add more columns).
-const LOOKUP = {
-  TYPE_COL: 3,     // C
-  DATATYPE_START: 4, // D
-  DATATYPE_END: 9    // I
+// Hard-coded Parameter type -> valid Data types. Keys are matched
+// case-insensitively. Mirrors the userscript's own TYPE_MATRIX.
+const TYPE_DATATYPE_MAP = {
+  'float': ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'integer': ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'text': ['Unlimited', 'Options', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'float2': ['Unlimited', 'Advanced Formula', 'Formula'],
+  'boolean': ['Unlimited', 'Fixed Value'],
+  'multiple boolean values': ['Unlimited', 'Fixed Value'],
+  'material': ['Unlimited', 'Options', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'style': ['Unlimited', 'Options', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'contour': ['Unlimited', 'Options', 'Advanced Formula', 'Formula', 'Fixed Value']
 };
 
 function onEdit(e) {
   const sheet = e.range.getSheet();
   if (sheet.getName() !== DATA_SHEET_NAME) return;
-  if (e.range.getRow() === 1) return;
-  if (e.range.getColumn() !== COL.PARAM_TYPE) return;
 
-  applyDataTypeValidation(sheet, e.range.getRow());
+  // Drag-fill / paste can span many rows and/or columns in one event —
+  // only react if the edited range touches the Parameter type column.
+  const startCol = e.range.getColumn();
+  const endCol = startCol + e.range.getNumColumns() - 1;
+  if (COL.PARAM_TYPE < startCol || COL.PARAM_TYPE > endCol) return;
+
+  const startRow = Math.max(e.range.getRow(), 2); // never row 1 (header)
+  const endRow = e.range.getRow() + e.range.getNumRows() - 1;
+  if (startRow > endRow) return;
+
+  for (let row = startRow; row <= endRow; row++) {
+    applyDataTypeValidation(sheet, row);
+  }
 }
 
 function applyDataTypeValidation(sheet, row) {
@@ -49,11 +81,11 @@ function applyDataTypeValidation(sheet, row) {
     return;
   }
 
-  const validTypes = lookupValidDataTypes(paramType);
-  if (validTypes.length === 0) {
+  const validTypes = TYPE_DATATYPE_MAP[paramType.toLowerCase()];
+  if (!validTypes) {
     dataTypeCell.clearDataValidations();
     dataTypeCell.setNote(
-      'No Data type list found for Parameter type "' + paramType + '" in the ' + LOOKUP_SHEET_NAME + ' tab — add a row there first.'
+      'Unknown Parameter type "' + paramType + '" — not in TYPE_DATATYPE_MAP in the Apps Script.'
     );
     return;
   }
@@ -68,35 +100,21 @@ function applyDataTypeValidation(sheet, row) {
   // If the row already had a Data type value that's no longer valid for the
   // newly-selected Parameter type (e.g. switched Float -> Text while Range
   // was set), clear it rather than leave a silently-invalid combination.
+  // Same-value drags (Float -> Float across many rows) never hit this,
+  // since the existing value is always still in validTypes.
   const current = String(dataTypeCell.getValue()).trim();
   if (current && validTypes.indexOf(current) === -1) {
     dataTypeCell.setValue('');
   }
 }
 
-function lookupValidDataTypes(paramType) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const lookupSheet = ss.getSheetByName(LOOKUP_SHEET_NAME);
-  if (!lookupSheet) return [];
-
-  const lastRow = lookupSheet.getLastRow();
-  const width = LOOKUP.DATATYPE_END - LOOKUP.TYPE_COL + 1;
-  const values = lookupSheet.getRange(1, LOOKUP.TYPE_COL, lastRow, width).getValues();
-
-  for (const rowVals of values) {
-    const rowType = String(rowVals[0]).trim();
-    if (rowType && rowType.toLowerCase() === paramType.toLowerCase()) {
-      return rowVals.slice(1).map(v => String(v).trim()).filter(v => v !== '');
-    }
-  }
-  return [];
-}
-
 /**
  * One-shot backfill: applies the correct Data type dropdown to every
  * existing row in Parameter Add, based on whatever Parameter type is
  * already there. Run this once after installing the script, and again any
- * time you bulk-paste rows in from elsewhere (paste doesn't trigger onEdit).
+ * time you bulk-paste rows in from elsewhere (paste of pre-filled values
+ * still fires onEdit, but run this anyway if you ever import via a method
+ * that bypasses the UI, e.g. an API-based import).
  */
 function backfillAllDataTypeDropdowns() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
