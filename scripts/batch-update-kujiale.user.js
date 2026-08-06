@@ -35,7 +35,10 @@
         QUOTE: { id: 'QUOTE', label: 'Quotation Output', color: THEME.indigo, icon: '⚡', implemented: true },
         PARAM_EDIT: { id: 'PARAM_EDIT', label: 'Add / Edit Params', color: THEME.primary, icon: '＋', implemented: true },
         PARAM_DEL: { id: 'PARAM_DEL', label: 'Delete Params', color: THEME.danger, icon: '－', implemented: true },
-        PART_EDIT: { id: 'PART_EDIT', label: 'Add / Edit Parts', color: THEME.success, icon: '🧩', implemented: false },
+        // "Edit" isn't implemented — there's no confirmed way to re-identify
+        // an already-added part instance from a CSV row (refName is
+        // optional, so it can't serve as a key), only to add new ones.
+        PART_EDIT: { id: 'PART_EDIT', label: 'Add Parts', color: THEME.success, icon: '🧩', implemented: true },
         PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: false }
     };
 
@@ -201,7 +204,12 @@
             expressionType: findCol(n, 'expressiontype'),
             w: findCol(n, 'modelwidth', 'width', 'w'),
             d: findCol(n, 'modeldepth', 'depth', 'd'),
-            h: findCol(n, 'modelheight', 'height', 'h')
+            h: findCol(n, 'modelheight', 'height', 'h'),
+            // Parts (PART_EDIT) columns. childName is reference-only, not
+            // read for anything functional.
+            childSerial: findCol(n, 'childserialnumber', 'childserial'),
+            partName: findCol(n, 'partname'),
+            partRefName: findCol(n, 'referencename')
         };
     }
 
@@ -386,12 +394,15 @@
                 validateParamEditHeaders(idx);
             } else if (currentTask.id === 'PARAM_DEL') {
                 validateParamDelHeaders(idx);
+            } else if (currentTask.id === 'PART_EDIT') {
+                validatePartEditHeaders(idx);
             }
 
             if (preValidationErrors.length === 0) {
                 if (currentTask.id === 'QUOTE') validateQuoteRows(rows, idx);
                 else if (currentTask.id === 'PARAM_EDIT') validateParamEditRows(rows, idx);
                 else if (currentTask.id === 'PARAM_DEL') validateParamDelRows(rows, idx);
+                else if (currentTask.id === 'PART_EDIT') validatePartEditRows(rows, idx);
             }
 
             if (preValidationErrors.length > 0) {
@@ -431,6 +442,11 @@
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
         if (idx.paramName === -1) addErr('Header', '', '', 'Parameter Name', "Missing required column 'Parameter Name'.");
     }
+    function validatePartEditHeaders(idx) {
+        if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
+        if (idx.childSerial === -1) addErr('Header', '', '', 'Child Serial Number', "Missing required column 'Child Serial Number'.");
+        if (idx.partName === -1) addErr('Header', '', '', 'Part Name', "Missing required column 'Part Name'.");
+    }
 
     function validateQuoteRows(rows, idx) {
         for (let i = 1; i < rows.length; i++) {
@@ -461,6 +477,20 @@
             const refName = cell(row, idx.paramName);
             if (!serial) addErr(rowNum, 'Empty', refName, 'Product serial number', 'Model serial ID is empty.');
             if (!refName) addErr(rowNum, serial, 'Empty', 'Parameter Name', 'Parameter Name is empty.');
+        }
+    }
+
+    function validatePartEditRows(rows, idx) {
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
+            const rowNum = i + 1;
+            const serial = cell(row, idx.serial);
+            const childSerial = cell(row, idx.childSerial);
+            const partName = cell(row, idx.partName);
+            if (!serial) addErr(rowNum, 'Empty', partName, 'Product serial number', 'Model serial ID is empty.');
+            if (!childSerial) addErr(rowNum, serial, partName, 'Child Serial Number', 'Child Serial Number is required.');
+            if (!partName) addErr(rowNum, serial, '', 'Part Name', 'Part Name is required.');
+            // Reference name is optional (confirmed) — no check.
         }
     }
 
@@ -689,6 +719,15 @@
 
             if (taskId === 'PARAM_DEL') {
                 map.get(serial).push({ refName: cell(row, idx.paramName) });
+                continue;
+            }
+
+            if (taskId === 'PART_EDIT') {
+                map.get(serial).push({
+                    childSerial: cell(row, idx.childSerial),
+                    partName: cell(row, idx.partName),
+                    partRefName: cell(row, idx.partRefName)
+                });
                 continue;
             }
 
@@ -1121,6 +1160,85 @@
         });
     }
 
+    // =========================================================================
+    // SECTION 5b: PARTS (modelInstances[]) COMPILATION
+    // =========================================================================
+    // Captured verbatim via DevTools from a real, successful part-import: the
+    // editor calls this GET the moment you pick a part to add, BEFORE any
+    // save — response.editorModelInstances[0] is the ready-to-push
+    // modelInstances entry, already carrying its own full `parameters[]` and
+    // `customParamGroups[]` (nothing to hand-build there, unlike Global
+    // Parameters). Only uniqueId/instanceId/refName come back null and need
+    // filling in before it's pushed. isParentModelContainsCZ mirrors whether
+    // THIS parent model has its own "CZ" (Material) input — confirmed by the
+    // captured sample's Material param defaulting to `"value": "#CZ"` (a
+    // reference to the parent's own #CZ) when that flag is true.
+    async function fetchImportModelInstance(childObsBrandGoodId, parentHasCZ) {
+        const origin = window.location.origin;
+        const url = `${origin}/editor/api/site/import?obsbrandgoodid=${encodeURIComponent(childObsBrandGoodId)}&isParentModelContainsCZ=${parentHasCZ}&isAssembly=false`;
+        const resp = await fetch(url, {
+            method: 'GET',
+            credentials: 'include',
+            mode: 'cors',
+            headers: { accept: '*/*', 'editor-locale': 'en_US', 'x-qh-locale': 'en_US', 'x-qh-site': 'coohom' }
+        });
+        if (!resp.ok) throw new Error(`import lookup failed, status ${resp.status} (url: ${url})`);
+        const json = await resp.json();
+        const list = json.editorModelInstances;
+        return (Array.isArray(list) && list.length > 0) ? list[0] : null;
+    }
+
+    // Matches the shape of existing uniqueIds seen in real editorData
+    // (e.g. "g0a3ch0c27") — a short random base36 string.
+    function generateUniqueId() {
+        return Math.random().toString(36).slice(2, 12);
+    }
+
+    // instanceId must be unique across ed.modelInstances (existing ones are
+    // small, non-contiguous integers-as-strings) — assigning raw CSV row
+    // order would collide with whatever's already in the target model, so
+    // this takes the current max +1 instead. Called once per new part in
+    // CSV row order (the row's push into ed.modelInstances happens before
+    // the next row is compiled), so multiple new parts in one run still land
+    // in CSV order, just offset past whatever already exists.
+    function nextInstanceId(ed) {
+        let max = 0;
+        (ed.modelInstances || []).forEach(mi => {
+            const n = parseInt(mi.instanceId, 10);
+            if (!isNaN(n) && n > max) max = n;
+        });
+        return String(max + 1);
+    }
+
+    // Returns an error string on failure, or undefined on success — same
+    // convention as compileParamEditRow (the import lookup is async and can
+    // genuinely fail). Add-only: there's no confirmed way to re-identify an
+    // already-added part from a CSV row (refName is optional per the
+    // confirmed schema, so it can't serve as a lookup key), so every row
+    // pushes a new modelInstances entry.
+    async function compilePartEditRow(ed, row) {
+        const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
+        let def;
+        try {
+            def = await fetchImportModelInstance(row.childSerial, parentHasCZ);
+        } catch (e) {
+            return `Part import lookup failed for Child Serial Number '${row.childSerial}': ${e.message}`;
+        }
+        if (!def) return `Part '${row.childSerial}' not found (import endpoint returned no editorModelInstances).`;
+
+        const instance = _.cloneDeep(def);
+        instance.uniqueId = generateUniqueId();
+        instance.instanceId = nextInstanceId(ed);
+        if (row.partName) instance.name = row.partName;
+        // Reference name is optional (confirmed) — only overwrite when the
+        // CSV supplies one; otherwise leave it as the import response gave
+        // it (null).
+        if (row.partRefName) instance.refName = row.partRefName;
+
+        if (!ed.modelInstances) ed.modelInstances = [];
+        ed.modelInstances.push(instance);
+    }
+
     function checkDeletionDependencies(ed, rows) {
         const deletedNames = new Set(rows.map(r => r.refName));
         const inputs = ed.inputs || [];
@@ -1174,8 +1292,8 @@
         const tool = currentToolType();
         const hdrs = { "accept": "*/*", "editor-locale": "zh_CN" };
 
-        if (currentTask.id === 'PART_EDIT' || currentTask.id === 'PART_DEL') {
-            return { ok: false, msg: 'Parts logic not implemented yet.' };
+        if (currentTask.id === 'PART_DEL') {
+            return { ok: false, msg: 'Parts deletion not implemented yet.' };
         }
 
         let resp;
@@ -1217,6 +1335,11 @@
                 ed.outputConfig.productionParams = ed.outputConfig.productionParams.filter(p => !names.has(p.paramName));
             }
             names.forEach(n => removeFromAllGroups(ed, n));
+        } else if (currentTask.id === 'PART_EDIT') {
+            for (const row of data) {
+                const rowErr = await compilePartEditRow(ed, row);
+                if (rowErr) return { ok: false, msg: rowErr };
+            }
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
