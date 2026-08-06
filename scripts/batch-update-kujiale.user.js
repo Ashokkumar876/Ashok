@@ -159,7 +159,12 @@
             const idx = normHeaders.findIndex(h => h === p);
             if (idx !== -1) return idx;
         }
+        // Short patterns (the "w"/"d"/"h" single-letter fallbacks for
+        // Quotation's Width/Depth/Height) are exact-match only — as a
+        // substring they can match unrelated columns purely by accident,
+        // e.g. "d" inside "Product Name" once that column existed.
         for (const p of patterns) {
+            if (p.length < 3) continue;
             const idx = normHeaders.findIndex(h => h.includes(p));
             if (idx !== -1) return idx;
         }
