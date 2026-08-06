@@ -97,6 +97,11 @@
  * + Composite type = Range), Value must actually fall within Minimum and
  * Maximum — e.g. Minimum 0 / Maximum 100 / Value 101 now errors; before,
  * only Min/Max's presence was checked, never that Value was between them.
+ * A Reference-type Expression (Material/Style/Contour, e.g. "#CZ") must
+ * start with # or @, and — Validate Sheet only, since it needs the whole
+ * sheet's Parameter Names, not just one row — is checked (yellow) against
+ * every Parameter Name in the sheet plus the built-in #W/#D/#H, flagging
+ * likely typos without asserting anything about the target's own type.
  * None of this is ported from the userscript
  * (which never checked Options entry value types, blankness, or key
  * names) — added because leaving these unchecked meant real data-format
@@ -320,7 +325,7 @@ function onOpen() {
 // purely on colKey/value, no sheet access, so both the live per-row path
 // and the full-sheet Validate Sheet path can share it.
 // =========================================================================
-function validateRowCore(field, issues, duplicateTracker) {
+function validateRowCore(field, issues, duplicateTracker, refResolver) {
   function err(colKey, msg) { issues.push({ colKey: colKey, severity: 'error', msg: msg }); }
   function warn(colKey, msg) { issues.push({ colKey: colKey, severity: 'warning', msg: msg }); }
   function checkCase(colKey, trimmedVal, canonicalList) {
@@ -562,8 +567,13 @@ function validateRowCore(field, issues, duplicateTracker) {
     // pointer to another parameter (e.g. "#CZ", "#Style_Unlimited") — every
     // real example uses a leading # (or @). Flags plain text typed in by
     // mistake instead of an actual reference.
-    if (expressionType === 'reference' && expressionRaw && !/^[#@]/.test(expressionRaw.trim())) {
-      err('expression', `Reference expression should start with '#' or '@' (e.g. '#CZ') — got '${expressionRaw}'.`);
+    if (expressionType === 'reference' && expressionRaw) {
+      const refTrimmed = expressionRaw.trim();
+      if (!/^[#@]/.test(refTrimmed)) {
+        err('expression', `Reference expression should start with '#' or '@' (e.g. '#CZ') — got '${expressionRaw}'.`);
+      } else if (refResolver && !refResolver.exists(refTrimmed.slice(1))) {
+        warn('expression', `Reference '${refTrimmed}' doesn't match any Parameter Name in this sheet, or a known built-in (#W, #D, #H) — check for a typo, or confirm it's a valid system reference. (Only checked when you run Validate Sheet — live editing can't see the whole sheet's Parameter Names.)`);
+      }
     }
   }
 
@@ -663,9 +673,10 @@ function processRow(sheet, row, cols, lastCol) {
     }
     return trimmed;
   }
-  // No duplicateTracker here — duplicate-name detection needs the whole
-  // sheet, not just this row. Validate Sheet is the authority for that.
-  validateRowCore(field, rowIssues, null);
+  // No duplicateTracker or refResolver here — both need the whole sheet's
+  // Parameter Names, not just this row. Validate Sheet is the authority
+  // for those two checks.
+  validateRowCore(field, rowIssues, null, null);
 
   VALIDATED_KEYS.forEach(function (key) {
     const col = cols[key];
@@ -771,6 +782,20 @@ function validateParameterSheet() {
     }
   };
 
+  // Every Parameter Name in the sheet, lowercased, plus known built-in
+  // system references (#W/#D/#H — the Quotation-level dimension refs) —
+  // used to sanity-check "#XYZ" Reference expressions.
+  const knownNames = {};
+  ['w', 'd', 'h'].forEach(function (n) { knownNames[n] = true; });
+  if (cols.paramName) {
+    data.forEach(function (rowVals) {
+      const raw = rowVals[cols.paramName - 1];
+      const name = (raw === null || raw === undefined) ? '' : String(raw).trim();
+      if (name) knownNames[name.toLowerCase()] = true;
+    });
+  }
+  const refResolver = { exists: function (name) { return !!knownNames[String(name).trim().toLowerCase()]; } };
+
   for (let r = 0; r < data.length; r++) {
     const rowNum = r + 2;
     if (data[r].every(v => v === '' || v === null || v === undefined)) continue;
@@ -788,7 +813,7 @@ function validateParameterSheet() {
       return trimmed;
     }
 
-    const ctx = validateRowCore(field, rowIssues, duplicateTracker);
+    const ctx = validateRowCore(field, rowIssues, duplicateTracker, refResolver);
     rowIssues.forEach(function (issue) {
       const col = cols[issue.colKey];
       if (!col) return;
