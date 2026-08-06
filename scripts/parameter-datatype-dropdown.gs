@@ -83,14 +83,20 @@
  * Also sheet-only, but RED (these describe genuinely broken data, not
  * style): for Float/Integer, Value/Minimum/Maximum and every Options
  * entry's "value" must be numeric (a "#"/"@" formula reference is exempt).
- * For Float2, Value must be an "x,y" pair or {"x":...,"y":...} JSON,
- * matching Utils.formatFloat2's own parsing. And every Options entry may
- * only carry name/value/ignore — any other key (e.g. "ignor" instead of
- * "ignore") is flagged yellow as a likely typo, since a misspelled key is
- * silently dropped by the batch script rather than doing what you meant.
- * None of this is ported from the userscript (which never checked Options
- * entry value types or key names) — added because leaving these unchecked
- * meant real data-format mistakes went completely unflagged.
+ * Integer specifically rejects decimals ("1.5" is invalid for Integer,
+ * valid for Float — Float accepts both whole and decimal numbers). For
+ * Float2, Value must be an "x,y" pair or {"x":...,"y":...} JSON, matching
+ * Utils.formatFloat2's own parsing. Within an Options entry, Name and
+ * Ignore may be left blank, but Value may not — an empty "value":"" is
+ * flagged the same as the key being missing entirely, since every option
+ * needs an actual value to select even when it doesn't need a name. And
+ * every Options entry may only carry name/value/ignore — any other key
+ * (e.g. "ignor" instead of "ignore") is flagged yellow as a likely typo,
+ * since a misspelled key is silently dropped by the batch script rather
+ * than doing what you meant. None of this is ported from the userscript
+ * (which never checked Options entry value types, blankness, or key
+ * names) — added because leaving these unchecked meant real data-format
+ * mistakes went completely unflagged.
  *
  * ---------------------------------------------------------------------
  * PERFORMANCE
@@ -220,6 +226,21 @@ function isFormulaRef(v) {
 }
 
 const NUMERIC_PARAM_TYPES = ['float', 'integer'];
+
+// Integer must be a whole number — a decimal like "1.5" is invalid for
+// Integer even though it's perfectly valid for Float. Float accepts both
+// whole and decimal numbers. Returns an error message string, or null if
+// the value is fine for the given Parameter type.
+function checkNumericForType(v, pType, pTypeRaw) {
+  if (isFormulaRef(v)) return null;
+  const n = Number(v);
+  if (isNaN(n)) return `Numeric value expected, got '${v}' — Parameter type is ${pTypeRaw}.`;
+  if (pType === 'integer' && !Number.isInteger(n)) {
+    return `'${v}' has a decimal — Parameter type is Integer, which only accepts whole numbers (Float accepts both whole and decimal).`;
+  }
+  return null;
+}
+
 // Sheet-only check (see header comment): each Options entry should only
 // carry name/value/ignore — anything else is almost always a typo (e.g.
 // "ignor" instead of "ignore"), which the batch script would otherwise
@@ -230,10 +251,20 @@ const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
 // Composite type = Options branch (same JSON shape). Reports every entry's
 // problems rather than stopping at the first bad one, so a typo on entry 2
 // doesn't hide a numeric mismatch on entry 5.
+//
+// Name and Ignore may be blank ("") — confirmed acceptable. Value may NOT
+// be blank even though the "value" key is present: an empty string there
+// is still a real, meaningful gap (unlike Name/Ignore, every option needs
+// an actual value to select), so it's checked for emptiness specifically,
+// not just for the key being absent.
 function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
   parsed.forEach((o, oi) => {
     if (!o || o.name === undefined || o.value === undefined) {
       err(colKey, `Options entry ${oi + 1} is missing "name" or "value".`);
+      return;
+    }
+    if (String(o.value).trim() === '') {
+      err(colKey, `Options entry ${oi + 1} is missing a Value — Name and Ignore can be left blank, but Value is required.`);
       return;
     }
     Object.keys(o).forEach(function (k) {
@@ -241,8 +272,9 @@ function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
         warn(colKey, `Options entry ${oi + 1} ("${o.name}") has an unrecognized key "${k}" — expected only name/value/ignore. This is usually a typo, and a misspelled key is silently dropped instead of doing what you intended.`);
       }
     });
-    if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1 && String(o.value) !== '' && !isFormulaRef(String(o.value)) && isNaN(Number(o.value))) {
-      err(colKey, `Options entry ${oi + 1} ("${o.name}") has value '${o.value}', which is not numeric — Parameter type is ${pTypeRaw}.`);
+    if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1) {
+      const msg = checkNumericForType(String(o.value), pType, pTypeRaw);
+      if (msg) err(colKey, `Options entry ${oi + 1} ("${o.name}"): ${msg}`);
     }
   });
 }
@@ -350,9 +382,11 @@ function validateRowCore(field, issues, duplicateTracker) {
   // Sheet-only checks (see header comment): the userscript only checked
   // numeric-ness of Value for Float/Integer + Fixed Value specifically —
   // broadened here to any Data type, since Value feeds input.value
-  // regardless of Data type (same reasoning as the advisory below).
-  if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1 && value && !isFormulaRef(value) && isNaN(Number(value))) {
-    err('value', `Numeric value expected, got '${value}' — Parameter type is ${pTypeRaw}.`);
+  // regardless of Data type (same reasoning as the advisory below). Also
+  // now Integer-aware: Integer rejects decimals, Float accepts either.
+  if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1 && value) {
+    const msg = checkNumericForType(value, pType, pTypeRaw);
+    if (msg) err('value', msg);
   }
   if (pType === 'float2' && value && !isFormulaRef(value)) {
     const v = value.trim();
@@ -372,8 +406,9 @@ function validateRowCore(field, issues, duplicateTracker) {
   }
   if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1) {
     [['min', min], ['max', max]].forEach(([colKey, v]) => {
-      if (v && !isFormulaRef(v) && isNaN(Number(v))) {
-        err(colKey, `Numeric value expected, got '${v}' — Parameter type is ${pTypeRaw}.`);
+      if (v) {
+        const msg = checkNumericForType(v, pType, pTypeRaw);
+        if (msg) err(colKey, msg);
       }
     });
   }
