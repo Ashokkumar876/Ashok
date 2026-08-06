@@ -765,7 +765,22 @@
         if (!ed.customParamGroups) ed.customParamGroups = [];
         removeFromAllGroups(ed, refName);
         let target = ed.customParamGroups.find(g => g.groupName === groupName);
-        if (!target) { target = { groupName, paramNames: [] }; ed.customParamGroups.push(target); }
+        if (!target) {
+            // Creating a brand new group: if the empty system-default group
+            // is still sitting unclaimed, repurpose it (rename in place)
+            // instead of leaving it empty alongside a separate new group.
+            // Only the first new group gets to claim it — once renamed it's
+            // no longer "Custom parameters", so later new groups create
+            // fresh entries as normal.
+            const emptyDefault = ed.customParamGroups.find(g => isSystemDefaultGroup(g.groupName) && g.paramNames.length === 0);
+            if (emptyDefault) {
+                emptyDefault.groupName = groupName;
+                target = emptyDefault;
+            } else {
+                target = { groupName, paramNames: [] };
+                ed.customParamGroups.push(target);
+            }
+        }
         if (!target.paramNames.includes(refName)) target.paramNames.push(refName);
     }
 
