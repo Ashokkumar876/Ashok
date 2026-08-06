@@ -482,16 +482,22 @@
 
     function validatePartEditRows(rows, idx) {
         const seenPerModel = new Map();
+        const seenRefNamePerModel = new Map();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
             const serial = cell(row, idx.serial);
             const childSerial = cell(row, idx.childSerial);
             const partName = cell(row, idx.partName);
+            const partRefName = cell(row, idx.partRefName);
             if (!serial) addErr(rowNum, 'Empty', partName, 'Product serial number', 'Model serial ID is empty.');
             if (!childSerial) addErr(rowNum, serial, partName, 'Child Serial Number', 'Child Serial Number is required.');
             if (!partName) addErr(rowNum, serial, '', 'Part Name', 'Part Name is required.');
-            // Reference name is optional (confirmed) — no check.
+            // Reference name itself is optional (confirmed) — but when given,
+            // it must be unique per model, same as Parameter Name is for
+            // PARAM_EDIT (checked live at Run too, but catching it here means
+            // both offending rows show up together instead of the run
+            // stopping cold on whichever row hits it first server-side).
 
             // Same Child Serial Number + Part Name repeated for the same
             // target model — almost certainly a copy-paste duplicate row,
@@ -505,6 +511,25 @@
                 const key = childSerial + '|' + partName;
                 if (set.has(key)) addErr(rowNum, serial, partName, 'Child Serial Number', `Duplicate part — Child Serial Number '${childSerial}' with Part Name '${partName}' already appears earlier in this CSV for this model.`);
                 else set.add(key);
+            }
+
+            // Same Reference name reused across different rows for the same
+            // model (e.g. Top Shelf / TPS and Bottom Shelf / TPS) — flag
+            // BOTH rows, not just the later one, so the report shows the
+            // whole conflict at a glance.
+            if (serial && partRefName) {
+                if (!seenRefNamePerModel.has(serial)) seenRefNamePerModel.set(serial, new Map());
+                const refMap = seenRefNamePerModel.get(serial);
+                if (refMap.has(partRefName)) {
+                    const first = refMap.get(partRefName);
+                    if (!first.flagged) {
+                        addErr(first.rowNum, serial, partRefName, 'Reference name', `Duplicate Reference name '${partRefName}' found — also used on row ${rowNum} for this model.`);
+                        first.flagged = true;
+                    }
+                    addErr(rowNum, serial, partRefName, 'Reference name', `Duplicate Reference name '${partRefName}' found — also used on row ${first.rowNum} for this model.`);
+                } else {
+                    refMap.set(partRefName, { rowNum: rowNum, flagged: false });
+                }
             }
         }
     }
