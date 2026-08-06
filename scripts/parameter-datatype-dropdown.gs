@@ -673,10 +673,18 @@ function processRow(sheet, row, cols, lastCol) {
     }
     return trimmed;
   }
+  // Skip a fully blank row entirely — otherwise deleting a row's content
+  // re-triggers "Product serial number is empty" / "Parameter Name is
+  // required" etc. on the very next edit, since blank required fields are
+  // errors. That made Clear Validation Highlights look broken: it wiped
+  // the color, then any subsequent edit anywhere immediately re-flagged
+  // the still-listening blank row. validateParameterSheet already skips
+  // blank rows the same way; this brings the live path in line with it.
+  const rowIsBlank = values.every(function (v) { return v === '' || v === null || v === undefined; });
   // No duplicateTracker or refResolver here — both need the whole sheet's
   // Parameter Names, not just this row. Validate Sheet is the authority
   // for those two checks.
-  validateRowCore(field, rowIssues, null, null);
+  if (!rowIsBlank) validateRowCore(field, rowIssues, null, null);
 
   VALIDATED_KEYS.forEach(function (key) {
     const col = cols[key];
