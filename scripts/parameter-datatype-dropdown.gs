@@ -80,6 +80,18 @@
  * deliberately a WARNING, not an error — flagged because it's usually a
  * mistake, not because the batch script will reject it.
  *
+ * Also sheet-only, but RED (these describe genuinely broken data, not
+ * style): for Float/Integer, Value/Minimum/Maximum and every Options
+ * entry's "value" must be numeric (a "#"/"@" formula reference is exempt).
+ * For Float2, Value must be an "x,y" pair or {"x":...,"y":...} JSON,
+ * matching Utils.formatFloat2's own parsing. And every Options entry may
+ * only carry name/value/ignore — any other key (e.g. "ignor" instead of
+ * "ignore") is flagged yellow as a likely typo, since a misspelled key is
+ * silently dropped by the batch script rather than doing what you meant.
+ * None of this is ported from the userscript (which never checked Options
+ * entry value types or key names) — added because leaving these unchecked
+ * meant real data-format mistakes went completely unflagged.
+ *
  * ---------------------------------------------------------------------
  * PERFORMANCE
  * ---------------------------------------------------------------------
@@ -199,6 +211,42 @@ function checkParens(str) {
   return open === close;
 }
 
+// A "#Ref" or "@Ref" style formula reference is exempt from numeric checks
+// below — those are legitimate non-literal values, matching how the
+// userscript itself treats "#"-prefixed strings elsewhere (e.g. Quotation
+// Width/Depth/Height).
+function isFormulaRef(v) {
+  return typeof v === 'string' && (v.indexOf('#') !== -1 || v.indexOf('@') !== -1);
+}
+
+const NUMERIC_PARAM_TYPES = ['float', 'integer'];
+// Sheet-only check (see header comment): each Options entry should only
+// carry name/value/ignore — anything else is almost always a typo (e.g.
+// "ignor" instead of "ignore"), which the batch script would otherwise
+// silently drop instead of doing what you intended.
+const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
+
+// Shared by both the non-asset Options branch and the Advanced Formula +
+// Composite type = Options branch (same JSON shape). Reports every entry's
+// problems rather than stopping at the first bad one, so a typo on entry 2
+// doesn't hide a numeric mismatch on entry 5.
+function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
+  parsed.forEach((o, oi) => {
+    if (!o || o.name === undefined || o.value === undefined) {
+      err(colKey, `Options entry ${oi + 1} is missing "name" or "value".`);
+      return;
+    }
+    Object.keys(o).forEach(function (k) {
+      if (OPTION_ENTRY_ALLOWED_KEYS.indexOf(k) === -1) {
+        warn(colKey, `Options entry ${oi + 1} ("${o.name}") has an unrecognized key "${k}" — expected only name/value/ignore. This is usually a typo, and a misspelled key is silently dropped instead of doing what you intended.`);
+      }
+    });
+    if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1 && String(o.value) !== '' && !isFormulaRef(String(o.value)) && isNaN(Number(o.value))) {
+      err(colKey, `Options entry ${oi + 1} ("${o.name}") has value '${o.value}', which is not numeric — Parameter type is ${pTypeRaw}.`);
+    }
+  });
+}
+
 // =========================================================================
 // MENU
 // =========================================================================
@@ -299,8 +347,35 @@ function validateRowCore(field, issues, duplicateTracker) {
     const lv = value.toLowerCase();
     if (['true', 'false', '0', '1'].indexOf(lv) === -1) err('value', 'Boolean value must be true/false/0/1.');
   }
-  if (['float', 'integer'].indexOf(pType) !== -1 && dType === 'fixed value' && value && isNaN(Number(value))) {
-    err('value', `Numeric value expected, got '${value}'.`);
+  // Sheet-only checks (see header comment): the userscript only checked
+  // numeric-ness of Value for Float/Integer + Fixed Value specifically —
+  // broadened here to any Data type, since Value feeds input.value
+  // regardless of Data type (same reasoning as the advisory below).
+  if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1 && value && !isFormulaRef(value) && isNaN(Number(value))) {
+    err('value', `Numeric value expected, got '${value}' — Parameter type is ${pTypeRaw}.`);
+  }
+  if (pType === 'float2' && value && !isFormulaRef(value)) {
+    const v = value.trim();
+    let validFloat2 = false;
+    if (v.startsWith('{') && v.endsWith('}')) {
+      try {
+        const obj = JSON.parse(v);
+        validFloat2 = !!obj && typeof obj === 'object' && !isNaN(Number(obj.x)) && !isNaN(Number(obj.y));
+      } catch (e) { validFloat2 = false; }
+    } else {
+      const parts = v.split(',');
+      validFloat2 = parts.length === 2 && !isNaN(Number(parts[0].trim())) && !isNaN(Number(parts[1].trim()));
+    }
+    if (!validFloat2) {
+      err('value', `Float2 value should be an "x,y" numeric pair (e.g. "0,0") or {"x":...,"y":...} JSON — got '${value}'.`);
+    }
+  }
+  if (NUMERIC_PARAM_TYPES.indexOf(pType) !== -1) {
+    [['min', min], ['max', max]].forEach(([colKey, v]) => {
+      if (v && !isFormulaRef(v) && isNaN(Number(v))) {
+        err(colKey, `Numeric value expected, got '${v}' — Parameter type is ${pTypeRaw}.`);
+      }
+    });
   }
   // Sheet-only advisory (not ported from the userscript, see header comment):
   // compileParamEditRow's actual gate is `if (row.value !== '') input.value = row.value`
@@ -381,15 +456,15 @@ function validateRowCore(field, issues, duplicateTracker) {
       if (!optionsRaw) {
         err('options', 'Options is required for this Data type.');
       } else {
+        let parsed = null;
         try {
-          const parsed = JSON.parse(optionsRaw);
+          parsed = JSON.parse(optionsRaw);
           if (!Array.isArray(parsed)) throw new Error('not array');
-          parsed.forEach((o, oi) => {
-            if (!o || o.name === undefined || o.value === undefined) throw new Error('entry ' + oi + ' missing name/value');
-          });
         } catch (e) {
           err('options', `Options is not a valid JSON array of {name,value}: ${e.message}`);
+          parsed = null;
         }
+        if (parsed) validateOptionEntries(parsed, pType, pTypeRaw, 'options', err, warn);
       }
     } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
       try {
