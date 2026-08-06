@@ -91,7 +91,7 @@
             }
             return Utils.normalizeExpr(trimmed);
         },
-        // `link` (the Options/"Material Range" data) is ALWAYS a plain bare
+        // `link` (the Options/"Range Type" data) is ALWAYS a plain bare
         // asset id string for every asset type — Material and Style alike —
         // confirmed on Material_Options_Select/Condition and
         // Style_Options_Select/Condition alike. Never wrapped.
@@ -197,7 +197,7 @@
             imosOutputCondition: findCol(n, 'imosoutputcondition'),
             compositeType: findCol(n, 'compositetype', 'composite'),
             valueRelationship: findCol(n, 'valuerelationships', 'valuerelationship'),
-            materialRange: findCol(n, 'materialrange', 'range'),
+            materialRange: findCol(n, 'rangetype', 'materialrange', 'range'),
             expressionType: findCol(n, 'expressiontype'),
             w: findCol(n, 'modelwidth', 'width', 'w'),
             d: findCol(n, 'modeldepth', 'depth', 'd'),
@@ -555,12 +555,12 @@
                 }
             }
 
-            // Material Range / Expression Type: Material, Style, Contour only.
+            // Range Type / Expression Type: Material, Style, Contour only.
             if (isAsset && (dType === 'options' || dType === 'advanced formula')) {
                 if (!materialRange) {
-                    addErr(rowNum, serial, refName, 'Material Range', 'Material Range is required for Options / Advanced Formula on Material, Style, or Contour.', "Enter 'Select' or 'Condition'.");
+                    addErr(rowNum, serial, refName, 'Range Type', 'Range Type is required for Options / Advanced Formula on Material, Style, or Contour.', "Enter 'Select' or 'Condition'.");
                 } else if (!['select', 'condition'].includes(materialRange)) {
-                    addErr(rowNum, serial, refName, 'Material Range', `Invalid Material Range '${cell(row, idx.materialRange)}'.`, "Enter 'Select' or 'Condition'.");
+                    addErr(rowNum, serial, refName, 'Range Type', `Invalid Range Type '${cell(row, idx.materialRange)}'.`, "Enter 'Select' or 'Condition'.");
                 }
             }
             if (isAsset && (dType === 'formula' || dType === 'advanced formula')) {
@@ -623,7 +623,7 @@
                 const usesLink = dType === 'options' || (dType === 'advanced formula' && materialRange);
                 if (usesLink) {
                     if (!optionsRaw) {
-                        addErr(rowNum, serial, refName, 'Options', 'Options is required when Material Range is set.');
+                        addErr(rowNum, serial, refName, 'Options', 'Options is required when Range Type is set.');
                     } else if (materialRange === 'condition') {
                         try {
                             optionsParsed = JSON.parse(optionsRaw);
@@ -631,11 +631,11 @@
                                 throw new Error('expected {"cases":[...],"defaultValue":...}');
                             }
                         } catch (e) {
-                            addErr(rowNum, serial, refName, 'Options', `Options must be a JSON {"cases":[...],"defaultValue":...} block for Material Range = Condition: ${e.message}`);
+                            addErr(rowNum, serial, refName, 'Options', `Options must be a JSON {"cases":[...],"defaultValue":...} block for Range Type = Condition: ${e.message}`);
                             optionsParsed = null;
                         }
                     } else if (materialRange === 'select' && optionsRaw.trim().startsWith('{')) {
-                        addErr(rowNum, serial, refName, 'Options', 'Options should be a single plain asset id for Material Range = Select, not JSON.');
+                        addErr(rowNum, serial, refName, 'Options', 'Options should be a single plain asset id for Range Type = Select, not JSON.');
                     }
                 }
                 // Asset Expression data: "Reference" is a plain string;
@@ -802,7 +802,7 @@
         }));
     }
 
-    // Asset "Material Range = Condition" data (the `link` field): case/default
+    // Asset "Range Type = Condition" data (the `link` field): case/default
     // values are always bare asset ids, never wrapped — confirmed on both
     // Material_Options_Condition and Style_Options_Condition.
     function buildAssetConditionJson(parsed) {
@@ -1008,7 +1008,7 @@
 
         if (isAsset) {
             // "Options" column drives `link` for Options data type or an
-            // Advanced Formula row with Material Range set — never
+            // Advanced Formula row with Range Type set — never
             // editorOptions (that array stays empty for asset types).
             const usesLink = dType === 'options' || (dType === 'advanced formula' && row.materialRange);
             if (usesLink && row.optionsRaw !== '') {
