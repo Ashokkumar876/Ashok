@@ -236,7 +236,11 @@
             partParameterEditable: findCol(n, 'parametereditable'),
             partIgnoreInternalInterference: findCol(n, 'ignoreinternalinterference'),
             partResetAfterSuppression: findCol(n, 'resetthepartafterthesuppressionisreleased'),
-            partSuppressCondition: findCol(n, 'suppresscondition')
+            partSuppressCondition: findCol(n, 'suppresscondition'),
+            // JSON array of {"paramName":...,"value":...} for the child
+            // part's own custom parameters (Material/CZ, VGF, or any other
+            // paramName that part actually has).
+            customParameters: findCol(n, 'customparameters', 'customparameter')
         };
     }
 
@@ -634,15 +638,17 @@
                 }
             });
 
-            // Position Method — int literal (0/2/12 per the confirmed
-            // Position Method option list), OR a formula.
+            // Position Method — a whole number, a formula, OR an option
+            // NAME (e.g. "Lower Left Rear") resolved against the actual
+            // part's own editorOptions at Run time — the numeric mapping
+            // isn't hardcoded here on purpose (see compilePartEditRow),
+            // since it's read live off each part's own definition rather
+            // than assumed. Pre-validation can only rule out the formula
+            // case here; name validity needs the imported part, so it's
+            // deferred to Run.
             const positionMethod = cell(row, idx.positionMethod);
-            if (positionMethod) {
-                if (positionMethod.includes('#')) {
-                    if (!checkParens(positionMethod)) addErr(rowNum, serial, partName, 'Position Method', 'Unbalanced parentheses.');
-                } else if (!/^\d+$/.test(positionMethod)) {
-                    addErr(rowNum, serial, partName, 'Position Method', `Must be a whole number or a formula, got '${positionMethod}'.`);
-                }
+            if (positionMethod && positionMethod.includes('#') && !checkParens(positionMethod)) {
+                addErr(rowNum, serial, partName, 'Position Method', 'Unbalanced parentheses.');
             }
 
             // Width/Depth/Height and Position/Rotate X/Y/Z — numeric, OR a
@@ -663,6 +669,24 @@
                     addErr(rowNum, serial, partName, label, `Numeric value or formula expected, got '${v}'.`);
                 }
             });
+
+            // Custom Parameters — JSON array of {"paramName":...,"value":...}.
+            // Whether a given paramName actually exists on the imported
+            // part, and whether its value is a valid Condition JSON, can
+            // only be checked at Run time (needs the part's own definition)
+            // — this only checks the array/entry SHAPE is well-formed.
+            const customParameters = cell(row, idx.customParameters);
+            if (customParameters) {
+                try {
+                    const parsed = JSON.parse(customParameters);
+                    if (!Array.isArray(parsed)) throw new Error('expected a JSON array');
+                    parsed.forEach((entry, i) => {
+                        if (!entry || typeof entry !== 'object' || !entry.paramName) throw new Error(`entry ${i} missing "paramName"`);
+                    });
+                } catch (e) {
+                    addErr(rowNum, serial, partName, 'Custom Parameters', `Not a valid JSON array of {"paramName":...,"value":...}: ${e.message}`);
+                }
+            }
         }
     }
 
@@ -922,7 +946,8 @@
                     partParameterEditable: cell(row, idx.partParameterEditable),
                     partIgnoreInternalInterference: cell(row, idx.partIgnoreInternalInterference),
                     partResetAfterSuppression: cell(row, idx.partResetAfterSuppression),
-                    partSuppressCondition: cell(row, idx.partSuppressCondition)
+                    partSuppressCondition: cell(row, idx.partSuppressCondition),
+                    customParameters: cell(row, idx.customParameters)
                 });
                 continue;
             }
@@ -1531,12 +1556,35 @@
             if (p) p.value = combineFloat3(row.rotateX, row.rotateY, row.rotateZ, p.value);
         }
 
+        // Position Method — a whole number or formula passes straight
+        // through; anything else is resolved as an OPTION NAME against
+        // THIS part's own real editorOptions (confirmed on two separate
+        // real samples: Origin=0, Lower Left Rear=2, Custom baseline
+        // points=12 — not hardcoded here on purpose, since it's read live
+        // off the part's own definition rather than assumed, and different
+        // parts could plausibly list these differently).
+        if (row.positionMethod) {
+            const p = (instance.parameters || []).find(x => x.paramName === 'invokedPosType');
+            if (p) {
+                const v = row.positionMethod;
+                if (v.includes('#') || /^\d+$/.test(v)) {
+                    p.value = v;
+                } else {
+                    const opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === v.toLowerCase());
+                    if (!opt) {
+                        const valid = (p.editorOptions || []).map(o => o.name).join(', ');
+                        return `Position Method '${v}' isn't a valid option for part '${row.partName}' — valid names: ${valid || '(none listed on this part)'}.`;
+                    }
+                    p.value = opt.value;
+                }
+            }
+        }
+
         // Remaining Design Attribute fields — plain value passthrough on the
         // matching instance.parameters entry. Utils.normalizeExpr handles
         // both a literal true/false and an AND/OR formula string uniformly,
         // same convention as Hide condition/Locked condition elsewhere.
         [
-            ['positionMethod', 'invokedPosType'],
             ['partHideCondition', 'ignore'],
             ['partReplaceable', 'replaceable'],
             ['partQuotationRequired', 'needQuotation'],
@@ -1553,6 +1601,66 @@
             const p = (instance.parameters || []).find(x => x.paramName === paramName);
             if (p) p.value = Utils.normalizeExpr(val);
         });
+
+        // Custom Parameters — arbitrary paramName/value pairs on the child
+        // part's OWN parameters (its "Custom parameters" group — e.g.
+        // materialBrandGoodId/CZ, VGF, or any of the many style-slot params
+        // a Shutter part carries). One JSON array column rather than a
+        // dedicated column per possible name, since different child parts
+        // can each have entirely different custom parameter sets.
+        //
+        // Each entry's target valueType (read off the part's OWN existing
+        // parameter, not guessed) decides how its value is written —
+        // confirmed on three real samples per asset type (Top Shelf 1/2/3
+        // for material, same set for the VGF style slot):
+        //   - value starts with '#'  -> Reference: pass through as-is.
+        //   - value starts with '{'  -> Condition: {"cases":[...],
+        //     "defaultValue":...} block, each case value + defaultValue
+        //     wrapped per Utils.wrapAssetValue, formulaForm set to 1.
+        //   - otherwise              -> Direct: Utils.wrapAssetValue makes
+        //     a bare id pass through for Material, or wrap into
+        //     {"obsBrandGoodId":...,"versionId":0} for Style — same
+        //     helper already used for top-level asset parameters.
+        // Non-asset custom parameters (plain float/int/string/etc.) just
+        // get the value passed through, same as the Design Attribute
+        // fields above.
+        if (row.customParameters) {
+            let entries;
+            try {
+                entries = JSON.parse(row.customParameters);
+                if (!Array.isArray(entries)) throw new Error('expected a JSON array');
+            } catch (e) {
+                return `Custom Parameters is not a valid JSON array for part '${row.partName}': ${e.message}`;
+            }
+            for (const entry of entries) {
+                if (!entry || !entry.paramName) return `Custom Parameters entry missing "paramName" for part '${row.partName}'.`;
+                const p = (instance.parameters || []).find(x => x.paramName === entry.paramName);
+                if (!p) return `Custom parameter '${entry.paramName}' not found on part '${row.partName}'.`;
+                const val = entry.value !== undefined && entry.value !== null ? String(entry.value) : '';
+                if (['material', 'style', 'contour'].includes(p.valueType)) {
+                    const trimmed = val.trim();
+                    if (trimmed.startsWith('#')) {
+                        p.value = val;
+                        p.formulaForm = 0;
+                    } else if (trimmed.startsWith('{') && trimmed.includes('"cases"')) {
+                        let parsed;
+                        try {
+                            parsed = JSON.parse(trimmed);
+                            if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
+                        } catch (e) {
+                            return `Custom parameter '${entry.paramName}' value isn't a valid Condition JSON block for part '${row.partName}': ${e.message}`;
+                        }
+                        p.value = buildAssetFormulaConditionJson(parsed, p.valueType);
+                        p.formulaForm = 1;
+                    } else {
+                        p.value = Utils.wrapAssetValue(val, p.valueType);
+                        p.formulaForm = 0;
+                    }
+                } else {
+                    p.value = Utils.normalizeExpr(val);
+                }
+            }
+        }
     }
 
     // Alphanumeric/underscore only, matching the paramName convention used
