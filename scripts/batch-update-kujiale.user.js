@@ -360,7 +360,7 @@
     errorBtn.id = 'error-download';
     errorBtn.style.cssText = 'display:none; width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #ff4d4f; color:#ff4d4f; background:#fff; font-size:11px; cursor:pointer; font-weight:bold;';
     errorBtn.innerText = '📥 Download Format Errors';
-    errorBtn.onclick = () => { downloadCsvReport(preValidationErrors, 'csv_validation_errors', ['Row', 'Model ID', 'Reference Name', 'Column', 'Error', 'Suggested Fix'], e => [e.row, e.serial, e.refName, e.col, e.msg, e.fix || '']); };
+    errorBtn.onclick = () => { downloadCsvReport(preValidationErrors, 'csv_validation_errors', ['Row', 'Model ID', 'Parameter Name', 'Column', 'Error', 'Suggested Fix'], e => [e.row, e.serial, e.refName, e.col, e.msg, e.fix || '']); };
     body.appendChild(errorBtn);
 
     const runErrorBtn = document.createElement('button');
@@ -495,7 +495,11 @@
     // the row gets skipped the same way any other pre-validation failure
     // does (see errorRows below).
     async function checkAtReferences(rows, idx) {
-        const rowRefs = []; // {rowNum, serial, names: Set}
+        // Whichever of these columns exists identifies "this row" in the
+        // error report — Parameter Name for a Parameter CSV, Part Name for
+        // a Parts CSV.
+        const nameCol = idx.paramName !== -1 ? idx.paramName : idx.partName;
+        const rowRefs = []; // {rowNum, serial, rowName, names: Set}
         const serials = new Set();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
@@ -507,7 +511,7 @@
                 matches.forEach(m => names.add(m.slice(1)));
             });
             if (names.size > 0) {
-                rowRefs.push({ rowNum: i + 1, serial, names });
+                rowRefs.push({ rowNum: i + 1, serial, rowName: cell(row, nameCol), names });
                 serials.add(serial);
             }
         }
@@ -527,12 +531,12 @@
             }
         }));
 
-        rowRefs.forEach(({ rowNum, serial, names }) => {
+        rowRefs.forEach(({ rowNum, serial, rowName, names }) => {
             const known = refNamesBySerial.get(serial);
             if (!known) return;
             const missing = [...names].filter(n => !known.has(n));
             if (missing.length > 0) {
-                addErr(rowNum, serial, '', 'Reference', `${missing.map(n => '@' + n).join(', ')} doesn't match any part's Reference name in model '${serial}' — add that part first (with a matching Reference name), or check for a typo.`);
+                addErr(rowNum, serial, rowName, 'Reference', `${missing.map(n => '@' + n).join(', ')} doesn't match any part's Reference name in model '${serial}' — add that part first (with a matching Reference name), or check for a typo.`);
             }
         });
     }
