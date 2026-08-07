@@ -1206,8 +1206,17 @@
 
     function selfHealReferencedVars(ed) {
         if (!ed.inputs) return;
-        const matches = JSON.stringify(ed).match(/#[a-zA-Z0-9_]+/g) || [];
-        const referenced = new Set(matches.map(m => m.slice(1)));
+        // "#name(" is a formula FUNCTION CALL (e.g. #getProductCustomAttr(#CZ,
+        // "MTY","NA")), not a variable reference — confirmed on a real
+        // rejected save where this created a bogus parameter literally named
+        // "getProductCustomAttr", colliding with the reserved function name
+        // ("[getProductCustomAttr] 变量引用名重复"). \(?  captures an
+        // immediately-following '(' as part of the SAME match so it can be
+        // filtered by string check below — a lookahead here would be wrong,
+        // since backtracking a greedy quantifier past a failed lookahead can
+        // silently produce a shorter, truncated match instead of no match.
+        const matches = JSON.stringify(ed).match(/#[a-zA-Z0-9_]+\(?/g) || [];
+        const referenced = new Set(matches.filter(m => !m.endsWith('(')).map(m => m.slice(1)));
         const existing = new Set(ed.inputs.map(i => i.paramName));
         const builtins = new Set(['W', 'D', 'H', 'L']);
         referenced.forEach(v => {
