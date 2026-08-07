@@ -600,6 +600,15 @@
                 }
             }
 
+            // "Reset the part after the suppression is released" is
+            // strictly boolean (confirmed — corrected from the general
+            // "or formula" note that applied to the other Design Attribute
+            // fields but not this one).
+            const resetAfterSuppression = cell(row, idx.partResetAfterSuppression);
+            if (resetAfterSuppression && !['true', 'false'].includes(resetAfterSuppression.toLowerCase())) {
+                addErr(rowNum, serial, partName, 'Reset the part after the suppression is released', `Must be true or false, got '${resetAfterSuppression}'.`);
+            }
+
             // Boolean-ish part attributes — literal true/false, OR a formula
             // (contains '#', confirmed acceptable per your mapping notes).
             [
@@ -611,7 +620,6 @@
                 ['partBomOutput', 'BOM Output'],
                 ['partParameterEditable', 'Parameter Editable'],
                 ['partIgnoreInternalInterference', 'Ignore Internal Interference'],
-                ['partResetAfterSuppression', 'Reset the part after the suppression is released'],
                 ['partSuppressCondition', 'Suppress condition']
             ].forEach(([key, label]) => {
                 const v = cell(row, idx[key]);
