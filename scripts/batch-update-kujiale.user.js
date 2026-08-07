@@ -209,7 +209,33 @@
             // read for anything functional.
             childSerial: findCol(n, 'childserialnumber', 'childserial'),
             partName: findCol(n, 'partname'),
-            partRefName: findCol(n, 'referencename')
+            partRefName: findCol(n, 'referencename'),
+            // Part attribute columns — every one of these maps to a "value"
+            // field inside the newly-added instance's own parameters[]
+            // (confirmed against a real editorData sample: Shutter
+            // 1/2/3 show exactly this shape for each of these paramNames).
+            styleParameter: findCol(n, 'styleparameter'),
+            positionX: findCol(n, 'positionx'),
+            positionY: findCol(n, 'positiony'),
+            positionZ: findCol(n, 'positionz'),
+            rotateX: findCol(n, 'rotatex'),
+            rotateY: findCol(n, 'rotatey'),
+            rotateZ: findCol(n, 'rotatez'),
+            positionMethod: findCol(n, 'positionmethod'),
+            // Distinct from 'hideCondition' above (PARAM_EDIT's "Hide
+            // condition", singular) — this is Parts' "Hide Conditions"
+            // (plural), a different column on a different CSV shape.
+            partHideCondition: findCol(n, 'hideconditions'),
+            partReplaceable: findCol(n, 'replaceable'),
+            partQuotationRequired: findCol(n, 'quotationrequired'),
+            partRemovable: findCol(n, 'removable'),
+            partComponentRemovable: findCol(n, 'componentremovable'),
+            partStylePack: findCol(n, 'stylepack'),
+            partBomOutput: findCol(n, 'bomoutput'),
+            partParameterEditable: findCol(n, 'parametereditable'),
+            partIgnoreInternalInterference: findCol(n, 'ignoreinternalinterference'),
+            partResetAfterSuppression: findCol(n, 'resetthepartafterthesuppressionisreleased'),
+            partSuppressCondition: findCol(n, 'suppresscondition')
         };
     }
 
@@ -550,6 +576,82 @@
                     refMap.set(partRefName, { rowNum: rowNum, flagged: false });
                 }
             }
+
+            // Style Parameter (functionName) and Style Pack (modelPackage)
+            // are mutually exclusive — confirmed on a real sample: Shutter 1
+            // has functionName "#SD1" (a reference to another instance) and
+            // modelPackage null; Shutter 2/3 have a real standalone
+            // functionName and a real modelPackage value. A part can't be
+            // both "delegate to another instance" and "have its own style
+            // pack" at once.
+            const styleParameter = cell(row, idx.styleParameter);
+            const partStylePack = cell(row, idx.partStylePack);
+            if (styleParameter && partStylePack) {
+                addErr(rowNum, serial, partName, 'Style Pack', `Style Parameter and Style Pack cannot both have a value on the same row — leave Style Pack empty when Style Parameter is set (or vice versa).`);
+            }
+            if (partStylePack && partStylePack.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(partStylePack);
+                    if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) {
+                        throw new Error('expected {"cases":[...],"defaultValue":...}');
+                    }
+                } catch (e) {
+                    addErr(rowNum, serial, partName, 'Style Pack', `Style Pack looks like JSON but isn't a valid {"cases":[...],"defaultValue":...} block: ${e.message}`);
+                }
+            }
+
+            // Boolean-ish part attributes — literal true/false, OR a formula
+            // (contains '#', confirmed acceptable per your mapping notes).
+            [
+                ['partHideCondition', 'Hide Conditions'],
+                ['partReplaceable', 'Replaceable'],
+                ['partQuotationRequired', 'Quotation Required'],
+                ['partRemovable', 'Removable'],
+                ['partComponentRemovable', 'Component Removable'],
+                ['partBomOutput', 'BOM Output'],
+                ['partParameterEditable', 'Parameter Editable'],
+                ['partIgnoreInternalInterference', 'Ignore Internal Interference'],
+                ['partResetAfterSuppression', 'Reset the part after the suppression is released'],
+                ['partSuppressCondition', 'Suppress condition']
+            ].forEach(([key, label]) => {
+                const v = cell(row, idx[key]);
+                if (!v) return;
+                if (v.includes('#')) {
+                    if (!checkParens(v)) addErr(rowNum, serial, partName, label, 'Unbalanced parentheses.');
+                } else if (!['true', 'false'].includes(v.toLowerCase())) {
+                    addErr(rowNum, serial, partName, label, `Must be true, false, or a formula (containing '#'), got '${v}'.`);
+                }
+            });
+
+            // Position Method — int literal (0/2/12 per the confirmed
+            // Position Method option list), OR a formula.
+            const positionMethod = cell(row, idx.positionMethod);
+            if (positionMethod) {
+                if (positionMethod.includes('#')) {
+                    if (!checkParens(positionMethod)) addErr(rowNum, serial, partName, 'Position Method', 'Unbalanced parentheses.');
+                } else if (!/^\d+$/.test(positionMethod)) {
+                    addErr(rowNum, serial, partName, 'Position Method', `Must be a whole number or a formula, got '${positionMethod}'.`);
+                }
+            }
+
+            // Width/Depth/Height and Position/Rotate X/Y/Z — numeric, OR a
+            // formula. Whether a given part's W/D/H is even settable
+            // (paramTypeId 5 = Formula-driven internally, not overridable
+            // from the parent) can only be checked at Run time against the
+            // freshly-imported part definition — flagged there instead.
+            [
+                ['w', 'Width'], ['d', 'Depth'], ['h', 'Height'],
+                ['positionX', 'PositionX'], ['positionY', 'PositionY'], ['positionZ', 'PositionZ'],
+                ['rotateX', 'RotateX'], ['rotateY', 'RotateY'], ['rotateZ', 'RotateZ']
+            ].forEach(([key, label]) => {
+                const v = cell(row, idx[key]);
+                if (!v) return;
+                if (v.includes('#')) {
+                    if (!checkParens(v)) addErr(rowNum, serial, partName, label, 'Unbalanced parentheses.');
+                } else if (isNaN(Number(v))) {
+                    addErr(rowNum, serial, partName, label, `Numeric value or formula expected, got '${v}'.`);
+                }
+            });
         }
     }
 
@@ -787,7 +889,29 @@
                 map.get(serial).push({
                     childSerial: cell(row, idx.childSerial),
                     partName: cell(row, idx.partName),
-                    partRefName: cell(row, idx.partRefName)
+                    partRefName: cell(row, idx.partRefName),
+                    styleParameter: cell(row, idx.styleParameter),
+                    width: cell(row, idx.w),
+                    depth: cell(row, idx.d),
+                    height: cell(row, idx.h),
+                    positionX: cell(row, idx.positionX),
+                    positionY: cell(row, idx.positionY),
+                    positionZ: cell(row, idx.positionZ),
+                    rotateX: cell(row, idx.rotateX),
+                    rotateY: cell(row, idx.rotateY),
+                    rotateZ: cell(row, idx.rotateZ),
+                    positionMethod: cell(row, idx.positionMethod),
+                    partHideCondition: cell(row, idx.partHideCondition),
+                    partReplaceable: cell(row, idx.partReplaceable),
+                    partQuotationRequired: cell(row, idx.partQuotationRequired),
+                    partRemovable: cell(row, idx.partRemovable),
+                    partComponentRemovable: cell(row, idx.partComponentRemovable),
+                    partStylePack: cell(row, idx.partStylePack),
+                    partBomOutput: cell(row, idx.partBomOutput),
+                    partParameterEditable: cell(row, idx.partParameterEditable),
+                    partIgnoreInternalInterference: cell(row, idx.partIgnoreInternalInterference),
+                    partResetAfterSuppression: cell(row, idx.partResetAfterSuppression),
+                    partSuppressCondition: cell(row, idx.partSuppressCondition)
                 });
                 continue;
             }
@@ -1334,6 +1458,83 @@
         // save batch are not. Fall back to a name-derived, batch-unique
         // value instead of leaving it null.
         instance.refName = row.partRefName || deriveFallbackPartRefName(row.partName, instance.instanceId);
+
+        // Style Parameter -> functionName. Only overwritten when supplied;
+        // blank leaves the import response's own functionName as-is (the
+        // normal, standalone case — see Shutter 2/3 vs Shutter 1 below).
+        if (row.styleParameter) instance.functionName = row.styleParameter;
+
+        // Style Pack -> the "modelPackage" entry inside instance.parameters.
+        // Confirmed shape from a real sample: Shutter 1 (functionName
+        // "#SD1", delegates to another instance) has modelPackage null;
+        // Shutter 2 (standalone functionName) has a bare style-pack id
+        // string; Shutter 3 (same standalone functionName) has a
+        // {"cases":[...],"defaultValue":...} JSON block — both the bare-id
+        // and the Condition-JSON form are stored verbatim, no wrapping.
+        if (row.partStylePack) {
+            const modelPackageParam = (instance.parameters || []).find(p => p.paramName === 'modelPackage');
+            if (modelPackageParam) modelPackageParam.value = row.partStylePack;
+        }
+
+        // Width/Depth/Height -> W/D/H inside instance.parameters. A part's
+        // own W/D/H can be paramTypeId 5 (Formula-driven internally, e.g.
+        // Top Shelf's own Depth references @MF18.PTH) — confirmed not
+        // overridable from the parent in that case, so this errors instead
+        // of silently no-op'ing a value the user explicitly asked to set.
+        for (const [paramName, val, label] of [['W', row.width, 'Width'], ['D', row.depth, 'Depth'], ['H', row.height, 'Height']]) {
+            if (!val) continue;
+            const p = (instance.parameters || []).find(x => x.paramName === paramName);
+            if (!p) continue;
+            if (p.paramTypeId === 5) {
+                return `Cannot set ${label} on part '${row.partName}' — this part's own ${paramName} is Formula-driven internally (paramTypeId 5), not settable from the parent model.`;
+            }
+            p.value = val;
+        }
+
+        // Position/Rotate -> the "position"/"rotationDegree" float3 JSON.
+        // Only the supplied axis is overridden; the other axes keep
+        // whatever the import response already had (own default, usually
+        // "0" for a fresh part).
+        const combineFloat3 = (x, y, z, existingRaw) => {
+            let existing = {};
+            try { existing = existingRaw ? JSON.parse(existingRaw) : {}; } catch (e) { existing = {}; }
+            return JSON.stringify({
+                x: x !== '' ? x : (existing.x !== undefined ? existing.x : '0'),
+                y: y !== '' ? y : (existing.y !== undefined ? existing.y : '0'),
+                z: z !== '' ? z : (existing.z !== undefined ? existing.z : '0')
+            });
+        };
+        if (row.positionX !== '' || row.positionY !== '' || row.positionZ !== '') {
+            const p = (instance.parameters || []).find(x => x.paramName === 'position');
+            if (p) p.value = combineFloat3(row.positionX, row.positionY, row.positionZ, p.value);
+        }
+        if (row.rotateX !== '' || row.rotateY !== '' || row.rotateZ !== '') {
+            const p = (instance.parameters || []).find(x => x.paramName === 'rotationDegree');
+            if (p) p.value = combineFloat3(row.rotateX, row.rotateY, row.rotateZ, p.value);
+        }
+
+        // Remaining Design Attribute fields — plain value passthrough on the
+        // matching instance.parameters entry. Utils.normalizeExpr handles
+        // both a literal true/false and an AND/OR formula string uniformly,
+        // same convention as Hide condition/Locked condition elsewhere.
+        [
+            ['positionMethod', 'invokedPosType'],
+            ['partHideCondition', 'ignore'],
+            ['partReplaceable', 'replaceable'],
+            ['partQuotationRequired', 'needQuotation'],
+            ['partRemovable', 'isDeletable'],
+            ['partComponentRemovable', 'cascadeDelete'],
+            ['partBomOutput', 'displayInCostList'],
+            ['partParameterEditable', 'paramOverride'],
+            ['partIgnoreInternalInterference', 'ignoreInnerIntersect'],
+            ['partResetAfterSuppression', 'resetWhenSuppress'],
+            ['partSuppressCondition', 'KJL_model_suppress_param']
+        ].forEach(([rowKey, paramName]) => {
+            const val = row[rowKey];
+            if (!val) return;
+            const p = (instance.parameters || []).find(x => x.paramName === paramName);
+            if (p) p.value = Utils.normalizeExpr(val);
+        });
 
         if (!ed.modelInstances) ed.modelInstances = [];
         ed.modelInstances.push(instance);
