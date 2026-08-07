@@ -35,10 +35,11 @@
         QUOTE: { id: 'QUOTE', label: 'Quotation Output', color: THEME.indigo, icon: '⚡', implemented: true },
         PARAM_EDIT: { id: 'PARAM_EDIT', label: 'Add / Edit Params', color: THEME.primary, icon: '＋', implemented: true },
         PARAM_DEL: { id: 'PARAM_DEL', label: 'Delete Params', color: THEME.danger, icon: '－', implemented: true },
-        // "Edit" isn't implemented — there's no confirmed way to re-identify
-        // an already-added part instance from a CSV row (refName is
-        // optional, so it can't serve as a key), only to add new ones.
-        PART_EDIT: { id: 'PART_EDIT', label: 'Add Parts', color: THEME.success, icon: '🧩', implemented: true },
+        // Edit matches an existing part by Reference name (row.partRefName)
+        // — a row whose refName isn't already on a part in the model adds a
+        // new one, matching refName edits that one in place. A blank
+        // Reference name always adds (no other reliable key to match on).
+        PART_EDIT: { id: 'PART_EDIT', label: 'Add / Edit Parts', color: THEME.success, icon: '🧩', implemented: true },
         PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: false }
     };
 
@@ -1428,46 +1429,53 @@
 
     // Returns an error string on failure, or undefined on success — same
     // convention as compileParamEditRow (the import lookup is async and can
-    // genuinely fail). Add-only: there's no confirmed way to re-identify an
-    // already-added part from a CSV row (refName is optional per the
-    // confirmed schema, so it can't serve as a lookup key), so every row
-    // pushes a new modelInstances entry.
+    // genuinely fail). Add or Edit, decided by whether row.partRefName
+    // matches an existing part's refName in this model.
     async function compilePartEditRow(ed, row) {
-        // Reproduced on a real run: re-importing a CSV that includes a part
-        // already added to this model (from an earlier run, or a repeated
-        // row in this same CSV) silently pushed a SECOND modelInstances
-        // entry with the same refName — server rejected the save as
-        // "instanceId重复或为空; 部件引用名重复". Checked up front (cheap,
-        // no network call) against both pre-existing parts AND ones already
-        // pushed earlier in this same run.
-        if (row.partRefName && (ed.modelInstances || []).some(mi => mi.refName === row.partRefName)) {
-            return `Reference name '${row.partRefName}' already exists on a part in this model — remove this row if it's already added, or use a different Reference name.`;
+        if (!ed.modelInstances) ed.modelInstances = [];
+
+        // Edit path: a Reference name that already matches a part in this
+        // model means "update that part", not "reject as duplicate" — this
+        // is the same match-by-key-and-reuse pattern compileParamEditRow
+        // already uses for top-level parameters (ed.inputs.find by
+        // paramName). Requires Reference name; there's still no other
+        // reliable key to re-identify an already-added part (obsBrandGoodId
+        // alone can't disambiguate — the same catalog part can legitimately
+        // be added more than once, e.g. several identical screws).
+        let instance = row.partRefName ? ed.modelInstances.find(mi => mi.refName === row.partRefName) : null;
+
+        if (instance) {
+            if (row.partName) instance.name = row.partName;
+        } else {
+            // Add path: fetch the child's full definition and push a new
+            // instance, same as before.
+            const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
+            let def;
+            try {
+                def = await fetchImportModelInstance(row.childSerial, parentHasCZ);
+            } catch (e) {
+                return `Part import lookup failed for Child Serial Number '${row.childSerial}': ${e.message}`;
+            }
+            if (!def) return `Part '${row.childSerial}' not found (import endpoint returned no editorModelInstances).`;
+
+            instance = _.cloneDeep(def);
+            instance.uniqueId = generateUniqueId();
+            instance.instanceId = nextInstanceId(ed);
+            if (row.partName) instance.name = row.partName;
+            // Reference name is optional per row (confirmed) — but leaving
+            // it as the import response's literal null broke on a real run
+            // when several blank-refName rows landed in the SAME save:
+            // server rejected it as "part reference name duplicate" (多
+            // null 视为重复). Pre-existing null-refName parts in a model
+            // are fine — those were each saved one at a time — but
+            // multiple simultaneous nulls in one save batch are not. Fall
+            // back to a name-derived, batch-unique value instead of
+            // leaving it null.
+            instance.refName = row.partRefName || deriveFallbackPartRefName(row.partName, instance.instanceId);
+            ed.modelInstances.push(instance);
         }
 
-        const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
-        let def;
-        try {
-            def = await fetchImportModelInstance(row.childSerial, parentHasCZ);
-        } catch (e) {
-            return `Part import lookup failed for Child Serial Number '${row.childSerial}': ${e.message}`;
-        }
-        if (!def) return `Part '${row.childSerial}' not found (import endpoint returned no editorModelInstances).`;
-
-        const instance = _.cloneDeep(def);
-        instance.uniqueId = generateUniqueId();
-        instance.instanceId = nextInstanceId(ed);
-        if (row.partName) instance.name = row.partName;
-        // Reference name is optional per row (confirmed) — but leaving it
-        // as the import response's literal null broke on a real run when
-        // several blank-refName rows landed in the SAME save: server
-        // rejected it as "part reference name duplicate" (多 null 视为重复).
-        // Pre-existing null-refName parts in a model are fine — those were
-        // each saved one at a time — but multiple simultaneous nulls in one
-        // save batch are not. Fall back to a name-derived, batch-unique
-        // value instead of leaving it null.
-        instance.refName = row.partRefName || deriveFallbackPartRefName(row.partName, instance.instanceId);
-
-        // Style Parameter -> functionName. Only overwritten when supplied;
+        // Style Parameter -> functionName (add or edit alike). Only overwritten when supplied;
         // blank leaves the import response's own functionName as-is (the
         // normal, standalone case — see Shutter 2/3 vs Shutter 1 below).
         if (row.styleParameter) instance.functionName = row.styleParameter;
@@ -1543,9 +1551,6 @@
             const p = (instance.parameters || []).find(x => x.paramName === paramName);
             if (p) p.value = Utils.normalizeExpr(val);
         });
-
-        if (!ed.modelInstances) ed.modelInstances = [];
-        ed.modelInstances.push(instance);
     }
 
     // Alphanumeric/underscore only, matching the paramName convention used
