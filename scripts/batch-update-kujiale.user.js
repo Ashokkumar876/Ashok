@@ -1206,16 +1206,26 @@
 
     function selfHealReferencedVars(ed) {
         if (!ed.inputs) return;
+        // Scoped to ed.inputs ONLY — a "#xyz" reference only ever resolves
+        // against a SIBLING top-level parameter. Scanning the whole
+        // editorData tree (previous behavior) also picked up every part's
+        // own NESTED parameters[] — a real rejected save had a Shutter part
+        // whose own local "Is_BSL" param referenced its own local
+        // "#materialBrandGoodId" (that part's internal Material scriptName,
+        // meaningless outside that part's scope). Since that name isn't in
+        // top-level ed.inputs, this function tried to create it there too —
+        // colliding with a system-reserved name ("引用名被系统占用"). Same
+        // root cause as the earlier #getProductCustomAttr(...) bug: treating
+        // an unrelated nested scope as if it were the top-level one.
+        //
         // "#name(" is a formula FUNCTION CALL (e.g. #getProductCustomAttr(#CZ,
-        // "MTY","NA")), not a variable reference — confirmed on a real
-        // rejected save where this created a bogus parameter literally named
-        // "getProductCustomAttr", colliding with the reserved function name
-        // ("[getProductCustomAttr] 变量引用名重复"). \(?  captures an
-        // immediately-following '(' as part of the SAME match so it can be
-        // filtered by string check below — a lookahead here would be wrong,
-        // since backtracking a greedy quantifier past a failed lookahead can
-        // silently produce a shorter, truncated match instead of no match.
-        const matches = JSON.stringify(ed).match(/#[a-zA-Z0-9_]+\(?/g) || [];
+        // "MTY","NA")), not a variable reference either — confirmed
+        // separately. \(?  captures an immediately-following '(' as part of
+        // the SAME match so it can be filtered by string check below — a
+        // lookahead here would be wrong, since backtracking a greedy
+        // quantifier past a failed lookahead can silently produce a
+        // shorter, truncated match instead of no match.
+        const matches = JSON.stringify(ed.inputs).match(/#[a-zA-Z0-9_]+\(?/g) || [];
         const referenced = new Set(matches.filter(m => !m.endsWith('(')).map(m => m.slice(1)));
         const existing = new Set(ed.inputs.map(i => i.paramName));
         const builtins = new Set(['W', 'D', 'H', 'L']);
