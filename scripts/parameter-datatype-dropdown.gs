@@ -449,10 +449,11 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
   // combination (Range/Options/Formula/Advanced Formula/assets included, not
   // just Fixed Value/Unlimited). Leaving it blank still runs fine (falls back
   // to a blank/0 skeleton default), so this stays a warning, not an error.
-  // Formula computes the value itself for Float/Integer/Text, so a default
-  // Value isn't expected there (confirmed; not a guess) — skip the advisory
-  // for just that combination. Every other combination still warns.
-  const formulaValueExempt = dType === 'formula' && ['float', 'integer', 'text'].indexOf(pType) !== -1;
+  // Formula computes the value itself, regardless of Parameter type
+  // (confirmed — Material + Formula included) — skip the advisory for
+  // Formula entirely rather than just Float/Integer/Text. Every other
+  // Data type still warns.
+  const formulaValueExempt = dType === 'formula';
   if (!value && !formulaValueExempt) {
     warn('value', `No Value (default value) set for this row — the batch script will still run (it falls back to an empty/zero default), but nearly every Parameter type/Data type combination accepts and uses one, so this is usually meant to have one.`);
   }
