@@ -244,12 +244,14 @@
 
     // Parameter type -> allowed Data types (derived from the verified schema table).
     const TYPE_MATRIX = {
-        float: ['options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
-        integer: ['options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
-        int: ['options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
+        // Unlimited IS allowed for Float/Integer, not just Text — confirmed
+        // on real production parameters (SY/XY/ZY/YY/FX/SJ/CZFX/CBCZFX are
+        // all Float+Unlimited, paramTypeId 0, in a real editorData sample).
+        // Float/Integer/Text all share this same set; only Text lacks Range.
+        float: ['unlimited', 'options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
+        integer: ['unlimited', 'options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
+        int: ['unlimited', 'options', 'interval', 'range', 'advanced formula', 'formula', 'fixed value'],
         float2: ['unlimited', 'advanced formula', 'formula'],
-        // Text shares the same set as Float/Integer, minus Range only —
-        // Interval IS allowed for Text (confirmed; not a guess).
         text: ['unlimited', 'options', 'interval', 'advanced formula', 'formula', 'fixed value'],
         string: ['unlimited', 'options', 'interval', 'advanced formula', 'formula', 'fixed value'],
         boolean: ['unlimited', 'fixed value'],

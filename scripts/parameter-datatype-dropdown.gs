@@ -160,8 +160,12 @@ const PARAM_TYPE_CANONICAL = ['Float', 'Float2', 'Integer', 'Text', 'Boolean', '
 
 // Parameter type -> valid Data types. Mirrors the userscript's TYPE_MATRIX.
 const TYPE_DATATYPE_MAP = {
-  'float':                   ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
-  'integer':                 ['Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  // Unlimited IS allowed for Float/Integer, not just Text — confirmed on
+  // real production parameters (SY/XY/ZY/YY/FX/SJ/CZFX/CBCZFX are all
+  // Float+Unlimited, paramTypeId 0, in a real editorData sample).
+  // Float/Integer/Text all share this same set; only Text lacks Range.
+  'float':                   ['Unlimited', 'Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
+  'integer':                 ['Unlimited', 'Options', 'Interval', 'Range', 'Advanced Formula', 'Formula', 'Fixed Value'],
   'text':                    ['Unlimited', 'Options', 'Interval', 'Advanced Formula', 'Formula', 'Fixed Value'],
   'float2':                  ['Unlimited', 'Advanced Formula', 'Formula'],
   'boolean':                 ['Unlimited', 'Fixed Value'],
