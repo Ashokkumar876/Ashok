@@ -414,7 +414,7 @@
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (f) => {
+        reader.onload = async (f) => {
             const rows = Utils.parseCSV(f.target.result);
             if (!rows || rows.length < 2) { showNotification('❌ Empty or invalid CSV.', THEME.danger); return; }
             const headers = rows[0];
@@ -449,30 +449,104 @@
                 document.getElementById('error-download').style.display = 'block';
                 showNotification(`❌ ${preValidationErrors.length} validation error(s) found.`, THEME.danger);
                 parsedData = null;
+                return;
+            }
+
+            // "@XYZ" references another part instance by its Reference
+            // name (e.g. @VG.H) — a real run failed server-side with
+            // "undefined variable reference" because @VG wasn't actually a
+            // part in that model yet. Checked live against each referenced
+            // model's actual parts before Run, same idea as the .gs sheet's
+            // "#XYZ" check but for real server state instead of just the
+            // CSV's own contents (only possible here since this path can
+            // make network calls; CSV-only pre-validation can't).
+            if (currentTask.id === 'PARAM_EDIT' || currentTask.id === 'PART_EDIT') {
+                document.getElementById('log-text').value = `Checking part references...`;
+                await checkAtReferences(rows, idx);
+            }
+
+            const errorRows = new Set(preValidationErrors.filter(e => typeof e.row === 'number').map(e => e.row));
+            parsedData = buildDataMap(currentTask.id, rows, idx, errorRows);
+            if (parsedData.size === 0) {
+                document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.`;
+                document.getElementById('error-download').style.display = 'block';
+                showNotification(`❌ ${preValidationErrors.length} validation error(s) found — no valid rows.`, THEME.danger);
+                parsedData = null;
+            } else if (errorRows.size > 0) {
+                document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.`;
+                document.getElementById('error-download').style.display = 'block';
+                runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
+                showNotification(`⚠️ ${errorRows.size} row(s) skipped (errors) — ${parsedData.size} model(s) still ready.`, THEME.warning);
             } else {
-                const errorRows = new Set(preValidationErrors.filter(e => typeof e.row === 'number').map(e => e.row));
-                parsedData = buildDataMap(currentTask.id, rows, idx, errorRows);
-                if (parsedData.size === 0) {
-                    document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.`;
-                    document.getElementById('error-download').style.display = 'block';
-                    showNotification(`❌ ${preValidationErrors.length} validation error(s) found — no valid rows.`, THEME.danger);
-                    parsedData = null;
-                } else if (errorRows.size > 0) {
-                    document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.`;
-                    document.getElementById('error-download').style.display = 'block';
-                    runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
-                    showNotification(`⚠️ ${errorRows.size} row(s) skipped (errors) — ${parsedData.size} model(s) still ready.`, THEME.warning);
-                } else {
-                    document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.`;
-                    document.getElementById('error-download').style.display = 'none';
-                    runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
-                    showNotification(`✅ ${parsedData.size} model(s) ready to run.`, THEME.success);
-                }
+                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.`;
+                document.getElementById('error-download').style.display = 'none';
+                runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
+                showNotification(`✅ ${parsedData.size} model(s) ready to run.`, THEME.success);
             }
         };
         reader.readAsText(file);
         e.target.value = '';
     };
+
+    // Scans every non-blank row for "@name" references, fetches each
+    // referenced model ONCE (grouped by Product serial number), and flags
+    // any reference that doesn't match a real part's Reference name —
+    // pushed into preValidationErrors exactly like a normal row error, so
+    // the row gets skipped the same way any other pre-validation failure
+    // does (see errorRows below).
+    async function checkAtReferences(rows, idx) {
+        const rowRefs = []; // {rowNum, serial, names: Set}
+        const serials = new Set();
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
+            const serial = cell(row, idx.serial);
+            if (!serial) continue;
+            const names = new Set();
+            row.forEach(v => {
+                const matches = String(v || '').match(/@[a-zA-Z0-9_]+/g) || [];
+                matches.forEach(m => names.add(m.slice(1)));
+            });
+            if (names.size > 0) {
+                rowRefs.push({ rowNum: i + 1, serial, names });
+                serials.add(serial);
+            }
+        }
+        if (serials.size === 0) return;
+
+        const refNamesBySerial = new Map();
+        await Promise.all([...serials].map(async serial => {
+            try {
+                refNamesBySerial.set(serial, await fetchModelRefNames(serial));
+            } catch (e) {
+                // Can't verify — model fetch failed (deleted, no access,
+                // network). Don't block the row over a lookup failure
+                // that's unrelated to the CSV's own content; Run will
+                // still hit the same fetch and surface it there if it's
+                // a real problem.
+                refNamesBySerial.set(serial, null);
+            }
+        }));
+
+        rowRefs.forEach(({ rowNum, serial, names }) => {
+            const known = refNamesBySerial.get(serial);
+            if (!known) return;
+            const missing = [...names].filter(n => !known.has(n));
+            if (missing.length > 0) {
+                addErr(rowNum, serial, '', 'Reference', `${missing.map(n => '@' + n).join(', ')} doesn't match any part's Reference name in model '${serial}' — add that part first (with a matching Reference name), or check for a typo.`);
+            }
+        });
+    }
+
+    async function fetchModelRefNames(serial) {
+        const origin = window.location.origin;
+        const tool = currentToolType();
+        const resp = await fetch(`${origin}/editor/api/site/editordata?obsbrandgoodid=${encodeURIComponent(serial)}&tooltype=${tool}`, { headers: { accept: '*/*', 'editor-locale': 'zh_CN' }, credentials: 'include' });
+        if (!resp.ok) throw new Error(`status ${resp.status}`);
+        const json = await resp.json();
+        const ed = json.editorData;
+        if (!ed) throw new Error('no editorData in response');
+        return new Set((ed.modelInstances || []).map(mi => mi.refName).filter(Boolean));
+    }
 
     function addErr(row, serial, refName, col, msg, fix) {
         preValidationErrors.push({ row, serial: serial || '', refName: refName || '', col, msg, fix: fix || '' });
