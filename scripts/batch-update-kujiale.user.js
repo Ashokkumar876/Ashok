@@ -639,7 +639,13 @@
     }
     function validatePartDelHeaders(idx) {
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
-        if (idx.partRefName === -1) addErr('Header', '', '', 'Reference name', "Missing required column 'Reference name'.");
+        // Reference name isn't on every part — some are added without one.
+        // Child Serial Number and Part Name are the fallback identifiers, so
+        // at least one of the three columns has to exist, not Reference
+        // name specifically.
+        if (idx.childSerial === -1 && idx.partName === -1 && idx.partRefName === -1) {
+            addErr('Header', '', '', 'Child Serial Number / Part Name / Reference name', "At least one of 'Child Serial Number', 'Part Name', or 'Reference name' columns is required.");
+        }
     }
 
     function validateQuoteRows(rows, idx) {
@@ -855,9 +861,16 @@
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
             const serial = cell(row, idx.serial);
+            const childSerial = cell(row, idx.childSerial);
+            const partName = cell(row, idx.partName);
             const partRefName = cell(row, idx.partRefName);
-            if (!serial) addErr(rowNum, 'Empty', partRefName, 'Product serial number', 'Model serial ID is empty.');
-            if (!partRefName) addErr(rowNum, serial, 'Empty', 'Reference name', 'Reference name is empty.');
+            if (!serial) addErr(rowNum, 'Empty', partRefName || partName, 'Product serial number', 'Model serial ID is empty.');
+            // At least one identifier — Reference name is the most precise
+            // (exact match), Child Serial Number + Part Name are the
+            // fallback for parts that were never given a Reference name.
+            if (!childSerial && !partName && !partRefName) {
+                addErr(rowNum, serial, '', 'Child Serial Number / Part Name / Reference name', 'At least one of Child Serial Number, Part Name, or Reference name is required to identify which part to delete.');
+            }
         }
     }
 
@@ -1124,7 +1137,11 @@
             }
 
             if (taskId === 'PART_DEL') {
-                map.get(serial).push({ partRefName: cell(row, idx.partRefName) });
+                map.get(serial).push({
+                    childSerial: cell(row, idx.childSerial),
+                    partName: cell(row, idx.partName),
+                    partRefName: cell(row, idx.partRefName)
+                });
                 continue;
             }
 
@@ -1974,6 +1991,41 @@
         return null;
     }
 
+    // Resolves which live part instance(s) a PART_DEL row identifies.
+    // Reference name is exact and unambiguous when given (a model can't
+    // have two parts sharing one refName). When it's blank, Child Serial
+    // Number narrows to every instance imported from that same catalog
+    // part — which can legitimately be more than one (e.g. two identical
+    // screws) — so Part Name is applied on top as a second filter to land
+    // on exactly one. Never guesses between multiple survivors; that's
+    // reported back as an error instead of picking one.
+    //
+    // NOTE: matches Child Serial Number against instance.obsBrandGoodId —
+    // inferred from the same key name Kujiale uses everywhere else for a
+    // model's catalog id (the "obsbrandgoodid" URL param, the
+    // {obsBrandGoodId,versionId} asset value shape), not yet confirmed
+    // against a captured modelInstances[] entry. Reference name / Part Name
+    // matching (refName / name) IS confirmed. If a Child-Serial-only row
+    // comes back "not found" unexpectedly, send the real modelInstances[]
+    // entry for that part and this gets corrected.
+    function findPartInstancesToDelete(ed, row) {
+        const instances = ed.modelInstances || [];
+        if (row.partRefName) {
+            return { matches: instances.filter(mi => mi.refName === row.partRefName), label: `Reference name '${row.partRefName}'` };
+        }
+        let candidates = instances;
+        let label = '';
+        if (row.childSerial) {
+            candidates = candidates.filter(mi => mi.obsBrandGoodId === row.childSerial);
+            label = `Child Serial Number '${row.childSerial}'`;
+        }
+        if (row.partName) {
+            candidates = candidates.filter(mi => mi.name === row.partName);
+            label = label ? `${label} + Part Name '${row.partName}'` : `Part Name '${row.partName}'`;
+        }
+        return { matches: candidates, label };
+    }
+
     // =========================================================================
     // SECTION 6: EXECUTION ENGINE
     // =========================================================================
@@ -2053,14 +2105,28 @@
                 if (rowErr) return { ok: false, msg: rowErr };
             }
         } else if (currentTask.id === 'PART_DEL') {
-            const missing = data.filter(r => !(ed.modelInstances || []).some(mi => mi.refName === r.partRefName));
-            if (missing.length > 0) {
-                return { ok: false, msg: `Part(s) not found on this model — Reference name(s): ${missing.map(r => r.partRefName).join(', ')}.` };
+            const resolved = [];
+            for (const row of data) {
+                const idLabel = `Child Serial Number '${row.childSerial || ''}' / Part Name '${row.partName || ''}' / Reference name '${row.partRefName || ''}'`;
+                const { matches, label } = findPartInstancesToDelete(ed, row);
+                if (matches.length === 0) {
+                    return { ok: false, msg: `No part found matching ${label || idLabel} on this model.` };
+                }
+                if (matches.length > 1) {
+                    const names = matches.map(m => `'${m.name || '(unnamed)'}'${m.refName ? ` (ref: ${m.refName})` : ''}`).join(', ');
+                    return { ok: false, msg: `${matches.length} parts match ${label} — ambiguous, refusing to guess. Matches: ${names}. Add Part Name and/or Reference name to identify exactly one.` };
+                }
+                resolved.push(matches[0]);
             }
-            const depErr = checkPartDeletionDependencies(ed, data);
-            if (depErr) return { ok: false, msg: depErr };
-            const refNames = new Set(data.map(r => r.partRefName));
-            ed.modelInstances = (ed.modelInstances || []).filter(mi => !refNames.has(mi.refName));
+            // Dependency check only makes sense for parts that have a
+            // refName — a blank-refName part can't be referenced elsewhere
+            // as "@refName." in the first place.
+            const depRows = resolved.filter(mi => mi.refName).map(mi => ({ partRefName: mi.refName }));
+            if (depRows.length > 0) {
+                const depErr = checkPartDeletionDependencies(ed, depRows);
+                if (depErr) return { ok: false, msg: depErr };
+            }
+            ed.modelInstances = (ed.modelInstances || []).filter(mi => !resolved.includes(mi));
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
