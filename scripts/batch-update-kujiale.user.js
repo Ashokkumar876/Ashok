@@ -2203,7 +2203,14 @@
             });
             const text = await resp.text();
             let data;
-            try { data = JSON.parse(text); } catch (e) { return { ok: false, msg: `Validation endpoint returned non-JSON (status ${resp.status}): ${text.slice(0, 200)}` }; }
+            // A non-JSON response here means the server crashed outright
+            // (HTTP 500 + generic error page) rather than rejecting the
+            // payload with a normal validateResults entry — no field/row
+            // pointer available the way a type:1 result gives us. Keep
+            // more of the raw text than before (was 200 chars, often cut
+            // off before anything past a generic <title>) in case a future
+            // occurrence's page actually names something useful.
+            try { data = JSON.parse(text); } catch (e) { return { ok: false, msg: `Validation endpoint returned non-JSON (status ${resp.status}): ${text.slice(0, 1000)}` }; }
             if (Array.isArray(data.validateResults) && data.validateResults.some(r => r.type === 1)) {
                 const msgs = data.validateResults.filter(r => r.type === 1).map(r => {
                     let paramName = null;
