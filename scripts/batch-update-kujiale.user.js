@@ -273,6 +273,26 @@
         return open === close;
     }
 
+    // A {"cases":[...],"defaultValue":...} Condition block with a blank
+    // case value or blank defaultValue parses as valid JSON but is invalid
+    // to Kujiale's server ("Invalid parameter value") — every case (and
+    // the default) needs a real asset id or a '#'/'@' reference, never
+    // blank. Reproduced on a real run (VGF's Options Condition block had
+    // two blank case values and a blank defaultValue). Returns a list of
+    // human-readable labels for whichever entries are blank, or [] if none.
+    function findBlankConditionCases(parsed) {
+        const blanks = [];
+        (parsed.cases || []).forEach((c, ci) => {
+            if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+                blanks.push(`case ${ci + 1}${c.condition ? ` (${c.condition})` : ''}`);
+            }
+        });
+        if (parsed.defaultValue === undefined || parsed.defaultValue === null || String(parsed.defaultValue).trim() === '') {
+            blanks.push('defaultValue');
+        }
+        return blanks;
+    }
+
     // =========================================================================
     // SECTION 3: UI CONSTRUCTION (frozen layout)
     // =========================================================================
@@ -680,6 +700,10 @@
                     if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) {
                         throw new Error('expected {"cases":[...],"defaultValue":...}');
                     }
+                    const blanks = findBlankConditionCases(parsed);
+                    if (blanks.length > 0) {
+                        addErr(rowNum, serial, partName, 'Style Pack', `Style Pack has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real style-pack id, not blank.`);
+                    }
                 } catch (e) {
                     addErr(rowNum, serial, partName, 'Style Pack', `Style Pack looks like JSON but isn't a valid {"cases":[...],"defaultValue":...} block: ${e.message}`);
                 }
@@ -760,6 +784,20 @@
                     if (!Array.isArray(parsed)) throw new Error('expected a JSON array');
                     parsed.forEach((entry, i) => {
                         if (!entry || typeof entry !== 'object' || !entry.paramName) throw new Error(`entry ${i} missing "paramName"`);
+                    });
+                    parsed.forEach(entry => {
+                        const v = entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
+                        if (v.startsWith('{') && v.includes('"cases"')) {
+                            try {
+                                const condParsed = JSON.parse(v);
+                                if (condParsed && Array.isArray(condParsed.cases) && condParsed.defaultValue !== undefined) {
+                                    const blanks = findBlankConditionCases(condParsed);
+                                    if (blanks.length > 0) {
+                                        addErr(rowNum, serial, partName, 'Custom Parameters', `'${entry.paramName}' has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real value, not blank.`);
+                                    }
+                                }
+                            } catch (e) { /* malformed JSON here is reported at Run time against the real part */ }
+                        }
                     });
                 } catch (e) {
                     addErr(rowNum, serial, partName, 'Custom Parameters', `Not a valid JSON array of {"paramName":...,"value":...}: ${e.message}`);
@@ -936,6 +974,10 @@
                             if (!optionsParsed || !Array.isArray(optionsParsed.cases) || optionsParsed.defaultValue === undefined) {
                                 throw new Error('expected {"cases":[...],"defaultValue":...}');
                             }
+                            const blanks = findBlankConditionCases(optionsParsed);
+                            if (blanks.length > 0) {
+                                addErr(rowNum, serial, refName, 'Options', `Options has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
+                            }
                         } catch (e) {
                             addErr(rowNum, serial, refName, 'Options', `Options must be a JSON {"cases":[...],"defaultValue":...} block for Range Type = Condition: ${e.message}`);
                             optionsParsed = null;
@@ -951,6 +993,10 @@
                         expressionParsed = JSON.parse(expressionRaw);
                         if (!expressionParsed || !Array.isArray(expressionParsed.cases) || expressionParsed.defaultValue === undefined) {
                             throw new Error('expected {"cases":[...],"defaultValue":...}');
+                        }
+                        const blanks = findBlankConditionCases(expressionParsed);
+                        if (blanks.length > 0) {
+                            addErr(rowNum, serial, refName, 'Expression', `Expression has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
                         }
                     } catch (e) {
                         addErr(rowNum, serial, refName, 'Expression', `Expression must be a JSON {"cases":[...],"defaultValue":...} block for Expression Type = Condition: ${e.message}`);

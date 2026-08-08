@@ -233,6 +233,27 @@ function checkParens(str) {
   return open === close;
 }
 
+// A {"cases":[...],"defaultValue":...} Condition block with a blank case
+// value or blank defaultValue parses as valid JSON but is invalid to
+// Kujiale's server ("Invalid parameter value") — every case (and the
+// default) needs a real asset id or a '#'/'@' reference, never blank.
+// Reproduced on a real run (VGF's Options Condition block had two blank
+// case values and a blank defaultValue). Mirrors the userscript's
+// findBlankConditionCases. Returns human-readable labels for whichever
+// entries are blank, or [] if none.
+function findBlankConditionCases(parsed) {
+  const blanks = [];
+  (parsed.cases || []).forEach(function (c, ci) {
+    if (c.value === undefined || c.value === null || String(c.value).trim() === '') {
+      blanks.push('case ' + (ci + 1) + (c.condition ? ' (' + c.condition + ')' : ''));
+    }
+  });
+  if (parsed.defaultValue === undefined || parsed.defaultValue === null || String(parsed.defaultValue).trim() === '') {
+    blanks.push('defaultValue');
+  }
+  return blanks;
+}
+
 // A "#Ref" or "@Ref" style formula reference is exempt from numeric checks
 // below — those are legitimate non-literal values, matching how the
 // userscript itself treats "#"-prefixed strings elsewhere (e.g. Quotation
@@ -560,6 +581,10 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
         try {
           const parsed = JSON.parse(optionsRaw);
           if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
+          const blanks = findBlankConditionCases(parsed);
+          if (blanks.length > 0) {
+            err('options', `Options has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
+          }
         } catch (e) {
           err('options', `Options must be a JSON {"cases":[...],"defaultValue":...} block for Range Type = Condition: ${e.message}`);
         }
@@ -571,6 +596,10 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
       try {
         const parsed = JSON.parse(expressionRaw);
         if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
+        const blanks = findBlankConditionCases(parsed);
+        if (blanks.length > 0) {
+          err('expression', `Expression has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
+        }
       } catch (e) {
         err('expression', `Expression must be a JSON {"cases":[...],"defaultValue":...} block for Expression Type = Condition: ${e.message}`);
       }
