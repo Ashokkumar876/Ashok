@@ -308,14 +308,14 @@ const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
 // problems rather than stopping at the first bad one, so a typo on entry 2
 // doesn't hide a numeric mismatch on entry 5.
 //
-// Name is confirmed optional — not required in every case, so left as an
-// advisory rather than blocked. Ignore may also be blank. Value may NOT be
+// Name is confirmed optional (not required in every case) — no check on it
+// at all, not even advisory. Ignore may also be blank. Value may NOT be
 // blank even though the "value" key is present: an empty string there is
 // still a real, meaningful gap, so it's checked for emptiness specifically,
-// not just for the key being absent. What actually matters more than Name
-// is that the row's own Value column matches one of these entries' actual
-// "value" — checked separately in validateRowCore, since that's the real
-// selection and a mismatch there is a genuine error.
+// not just for the key being absent. What actually matters is that the
+// row's own Value column matches one of these entries' actual "value" —
+// checked separately in validateRowCore, since that's the real selection
+// and a mismatch there is a genuine error.
 function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
   parsed.forEach((o, oi) => {
     if (!o || o.value === undefined) {
@@ -325,9 +325,6 @@ function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
     if (String(o.value).trim() === '') {
       err(colKey, `Options entry ${oi + 1} is missing a Value — Ignore can be left blank, but Value is required.`);
       return;
-    }
-    if (!o.name || String(o.name).trim() === '') {
-      warn(colKey, `Options entry ${oi + 1} ("${o.value}") has a blank "name" — Kujiale's dropdown shows this as the label for the selected Value, so it may render blank in the UI even though the underlying value is set. Usually meant to match "value".`);
     }
     Object.keys(o).forEach(function (k) {
       if (OPTION_ENTRY_ALLOWED_KEYS.indexOf(k) === -1) {
