@@ -47,6 +47,7 @@
     let parsedData = null; // Map<serial, row[]> (row = single object for QUOTE)
     let preValidationErrors = [];
     let lastRunErrors = [];
+    let lastDeleteSkippedProtected = []; // refNames of W/D/H/CZ silently skipped on PARAM_DEL
 
     // =========================================================================
     // SECTION 1: TOAST NOTIFICATIONS
@@ -266,6 +267,15 @@
         style: ['unlimited', 'options', 'advanced formula', 'formula', 'fixed value']
     };
     const ASSET_TYPES = ['material', 'style', 'contour'];
+
+    // Width/Depth/Height/Material — the "Basic parameters"/"System
+    // parameters" every one of these cabinet/shutter models has, always
+    // under these exact refNames, confirmed across every real sample seen.
+    // Always structurally referenced (frameModels' own "size" holds
+    // "#W"/"#D"/"#H" directly, "materialBrandGoodId" holds "#CZ") — never
+    // actually deletable, so PARAM_DEL just skips them rather than
+    // attempting (and blocking on) a delete that was never going to work.
+    const PROTECTED_PARAM_NAMES = new Set(['W', 'D', 'H', 'CZ']);
 
     function checkParens(str) {
         const open = (str.match(/\(/g) || []).length;
@@ -487,21 +497,24 @@
 
             const errorRows = new Set(preValidationErrors.filter(e => typeof e.row === 'number').map(e => e.row));
             parsedData = buildDataMap(currentTask.id, rows, idx, errorRows);
+            const protectedNote = lastDeleteSkippedProtected.length > 0
+                ? ` (${lastDeleteSkippedProtected.length} system parameter(s) [${[...new Set(lastDeleteSkippedProtected)].join(', ')}] always kept — skipped, not an error.)`
+                : '';
             if (parsedData.size === 0) {
                 document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.`;
                 document.getElementById('error-download').style.display = 'block';
                 showNotification(`❌ ${preValidationErrors.length} validation error(s) found — no valid rows.`, THEME.danger);
                 parsedData = null;
             } else if (errorRows.size > 0) {
-                document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.`;
+                document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.${protectedNote}`;
                 document.getElementById('error-download').style.display = 'block';
                 runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
                 showNotification(`⚠️ ${errorRows.size} row(s) skipped (errors) — ${parsedData.size} model(s) still ready.`, THEME.warning);
             } else {
-                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.`;
+                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.${protectedNote}`;
                 document.getElementById('error-download').style.display = 'none';
                 runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
-                showNotification(`✅ ${parsedData.size} model(s) ready to run.`, THEME.success);
+                showNotification(`✅ ${parsedData.size} model(s) ready to run.${lastDeleteSkippedProtected.length > 0 ? ' System params kept.' : ''}`, THEME.success);
             }
         };
         reader.readAsText(file);
@@ -1030,6 +1043,7 @@
 
     function buildDataMap(taskId, rows, idx, errorRows) {
         const map = new Map();
+        lastDeleteSkippedProtected = [];
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -1050,7 +1064,20 @@
             if (!map.has(serial)) map.set(serial, []);
 
             if (taskId === 'PARAM_DEL') {
-                map.get(serial).push({ refName: cell(row, idx.paramName) });
+                const refName = cell(row, idx.paramName);
+                // W/D/H/CZ are the model's own Basic/System parameters —
+                // always structurally referenced (frameModels' own "size"
+                // holds "#W"/"#D"/"#H", "materialBrandGoodId" holds "#CZ")
+                // so a delete would never actually succeed. Per user
+                // instruction, silently skip these rather than blocking
+                // the whole batch; every other (custom/local/global)
+                // parameter in the same CSV still deletes normally and
+                // still goes through the full dependency check.
+                if (PROTECTED_PARAM_NAMES.has(refName)) {
+                    lastDeleteSkippedProtected.push(refName);
+                    continue;
+                }
+                map.get(serial).push({ refName });
                 continue;
             }
 
