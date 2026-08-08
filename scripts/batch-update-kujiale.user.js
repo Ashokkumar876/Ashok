@@ -1960,14 +1960,20 @@
         return new RegExp('@' + escaped + '(?![A-Za-z0-9_])').test(text);
     }
 
-    function checkPartDeletionDependencies(ed, rows) {
-        const deletedNames = new Set(rows.map(r => r.partRefName));
+    // `targetRows` (must have partRefName — only a named part can be
+    // pointed at by "@refName") are what's being searched FOR.
+    // `deletedInstances` (every resolved instance in this batch, named or
+    // not) are what's excluded from the scan — a blank-refName part being
+    // deleted in the SAME batch can still hold its own "@OtherPart" formula
+    // in its own subtree, and that must not count as an external
+    // dependency any more than a named one would.
+    function checkPartDeletionDependencies(ed, targetRows, deletedInstances) {
         const inputs = ed.inputs || [];
         // Precise pass: sibling ed.inputs — gives a specific "referenced in
         // the X of Y" message when the dependency is a top-level parameter
         // (same idea as checkDeletionDependencies, but for "@refName" part
         // references instead of "#refName" parameter references).
-        for (const r of rows) {
+        for (const r of targetRows) {
             for (const inp of inputs) {
                 let field = null;
                 if (inp.formula && partRefUsed(String(inp.formula), r.partRefName)) field = 'formula';
@@ -1977,13 +1983,16 @@
             }
         }
         // Structural pass: other parts' own parameters, frameModels,
-        // moldingPaths, etc. can reference this part too. Exclude the
-        // instances being deleted themselves from the scan (their own
-        // refName obviously appears in their own subtree).
+        // moldingPaths, etc. can reference this part too. Exclude every
+        // instance being deleted in this batch from the scan by identity
+        // (uniqueId — present on every real modelInstance, confirmed;
+        // refName alone isn't enough since a blank-refName part being
+        // deleted would otherwise still show up as its own "dependency").
+        const deletedUniqueIds = new Set((deletedInstances || []).map(mi => mi.uniqueId).filter(Boolean));
         const edCopy = _.cloneDeep(ed);
-        edCopy.modelInstances = (edCopy.modelInstances || []).filter(mi => !deletedNames.has(mi.refName));
+        edCopy.modelInstances = (edCopy.modelInstances || []).filter(mi => !deletedUniqueIds.has(mi.uniqueId));
         const wholeText = JSON.stringify(edCopy);
-        for (const r of rows) {
+        for (const r of targetRows) {
             if (partRefUsed(wholeText, r.partRefName)) {
                 return `Cannot delete part '${r.partRefName}' — it's referenced (as '@${r.partRefName}...') elsewhere in the model (another part, parameter, or structure). Removing it would break that reference.`;
             }
@@ -2118,12 +2127,14 @@
                 }
                 resolved.push(matches[0]);
             }
-            // Dependency check only makes sense for parts that have a
-            // refName — a blank-refName part can't be referenced elsewhere
-            // as "@refName." in the first place.
+            // Dependency check only needs a search target for parts that
+            // have a refName — a blank-refName part can't be pointed at by
+            // anyone as "@refName." in the first place — but EVERY resolved
+            // instance (refName or not) must be excluded from the scan, so
+            // pass the full batch separately for that.
             const depRows = resolved.filter(mi => mi.refName).map(mi => ({ partRefName: mi.refName }));
             if (depRows.length > 0) {
-                const depErr = checkPartDeletionDependencies(ed, depRows);
+                const depErr = checkPartDeletionDependencies(ed, depRows, resolved);
                 if (depErr) return { ok: false, msg: depErr };
             }
             ed.modelInstances = (ed.modelInstances || []).filter(mi => !resolved.includes(mi));
