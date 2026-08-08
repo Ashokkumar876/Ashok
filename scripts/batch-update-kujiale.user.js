@@ -282,6 +282,23 @@
     // attempting (and blocking on) a delete that was never going to work.
     const PROTECTED_PARAM_NAMES = new Set(['W', 'D', 'H', 'CZ']);
 
+    // Position Method's editorOptions are read live off each part (never
+    // hardcoded), so whatever language that part's own definition uses is
+    // what an exact-name match requires. Some models list these in Chinese
+    // even though everything else in the CSV is English. Confirmed pairing
+    // (same 3-slot enum, same order/values 0/2/12, seen once in English and
+    // once in Chinese on real parts): Origin=原点, Lower Left Rear=左后下,
+    // Custom Reference Point=自定义基准点. Used only as a fallback after an
+    // exact-name match fails, so English-labeled parts are unaffected.
+    const POSITION_METHOD_ALIASES = {
+        'origin': ['原点'],
+        'lower left rear': ['左后下'],
+        'rear lower left': ['左后下'],
+        'custom reference point': ['自定义基准点'],
+        'custom baseline point': ['自定义基准点'],
+        'custom datum point': ['自定义基准点']
+    };
+
     function checkParens(str) {
         const open = (str.match(/\(/g) || []).length;
         const close = (str.match(/\)/g) || []).length;
@@ -1748,7 +1765,12 @@
                 if (v.includes('#') || /^\d+$/.test(v)) {
                     p.value = v;
                 } else {
-                    const opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === v.toLowerCase());
+                    const vLower = v.toLowerCase();
+                    let opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === vLower);
+                    if (!opt && POSITION_METHOD_ALIASES[vLower]) {
+                        const aliases = POSITION_METHOD_ALIASES[vLower];
+                        opt = (p.editorOptions || []).find(o => aliases.includes(String(o.name)));
+                    }
                     if (!opt) {
                         const valid = (p.editorOptions || []).map(o => o.name).join(', ');
                         return `Position Method '${v}' isn't a valid option for part '${row.partName}' — valid names: ${valid || '(none listed on this part)'}.`;
