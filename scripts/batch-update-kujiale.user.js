@@ -73,9 +73,14 @@
     // SECTION 2: LOW-LEVEL UTILITIES
     // =========================================================================
     const Utils = {
+        // Kujiale's own condition editor stores and displays AND/OR
+        // literally (confirmed: a Hide condition typed as "#D < 250 OR
+        // #W < 350" came back showing "||" once this used to convert it —
+        // the user wants the exact text they typed preserved). No operator
+        // substitution — pass the expression through as-is, just trimmed.
         normalizeExpr: (str) => {
             if (!str || typeof str !== "string") return str;
-            return str.replace(/\bAND\b/gi, '&&').replace(/\bOR\b/gi, '||').trim();
+            return str.trim();
         },
         // Handles both a JSON {"cases":[...]} formula-settings blob and a plain
         // JS-ish expression string ("#W < 50 ? 50 : 10") — both are valid
@@ -1224,9 +1229,21 @@
     // Only used for non-asset Options/Range-family parameters (editorOptions /
     // editorRecommends) — asset types route their "Options" data through
     // `link` instead (see buildAssetConditionJson).
+    //
+    // "name" is the label Kujiale's Value selector displays for the
+    // currently-picked option; the Optional* list itself falls back to
+    // showing "value" when name is blank, but the Value* selector does not
+    // — confirmed twice (VT, PFT) with a blank "name" in the CSV: the
+    // Optional* list showed the values fine, but Value* stayed empty even
+    // though the underlying value was saved correctly. When entering an
+    // option manually in Kujiale's own UI with no name, Kujiale silently
+    // defaults the label to the value — so we do the same here rather than
+    // sending a literal empty name (which the API takes at face value).
     function buildOptionEntries(parsedArr) {
         return parsedArr.map(o => ({
-            name: o.name != null ? String(o.name) : '',
+            name: (o.name !== undefined && o.name !== null && String(o.name).trim() !== '')
+                ? String(o.name)
+                : (o.value != null ? String(o.value) : ''),
             value: o.value != null ? String(o.value) : '',
             ignore: (o.ignore !== undefined && o.ignore !== null && o.ignore !== '') ? Utils.normalizeExpr(String(o.ignore)) : (o.ignore === '' ? '' : null),
             priority: o.priority != null ? o.priority : '',
