@@ -308,17 +308,14 @@ const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
 // problems rather than stopping at the first bad one, so a typo on entry 2
 // doesn't hide a numeric mismatch on entry 5.
 //
-// Correction: Name was previously treated as safe to leave blank — that
-// was wrong. Reproduced on a real run: Kujiale's dropdown shows the
-// selected option's "name" as the visible Value label, so a blank name
-// renders the Value field empty in the UI even though "value" itself is
-// set correctly underneath (VT and PFT both did this with blank names).
-// Every confirmed real sample has name matching value (e.g. VT's "No Vent"
-// entry has both name and value set to "No Vent"). Ignore may still be
-// blank — that one's fine. Value may NOT be blank even though the "value"
-// key is present: an empty string there is still a real, meaningful gap,
-// so it's checked for emptiness specifically, not just for the key being
-// absent.
+// Name is confirmed optional — not required in every case, so left as an
+// advisory rather than blocked. Ignore may also be blank. Value may NOT be
+// blank even though the "value" key is present: an empty string there is
+// still a real, meaningful gap, so it's checked for emptiness specifically,
+// not just for the key being absent. What actually matters more than Name
+// is that the row's own Value column matches one of these entries' actual
+// "value" — checked separately in validateRowCore, since that's the real
+// selection and a mismatch there is a genuine error.
 function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
   parsed.forEach((o, oi) => {
     if (!o || o.value === undefined) {
@@ -330,8 +327,7 @@ function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
       return;
     }
     if (!o.name || String(o.name).trim() === '') {
-      err(colKey, `Options entry ${oi + 1} ("${o.value}") has a blank "name" — Kujiale shows this as the selected Value in the UI, so it needs a real label, typically matching "value".`);
-      return;
+      warn(colKey, `Options entry ${oi + 1} ("${o.value}") has a blank "name" — Kujiale's dropdown shows this as the label for the selected Value, so it may render blank in the UI even though the underlying value is set. Usually meant to match "value".`);
     }
     Object.keys(o).forEach(function (k) {
       if (OPTION_ENTRY_ALLOWED_KEYS.indexOf(k) === -1) {
@@ -572,7 +568,17 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
           err('options', `Options is not a valid JSON array of {name,value}: ${e.message}`);
           parsed = null;
         }
-        if (parsed) validateOptionEntries(parsed, pType, pTypeRaw, 'options', err, warn);
+        if (parsed) {
+          validateOptionEntries(parsed, pType, pTypeRaw, 'options', err, warn);
+          // The row's Value is what actually gets selected — it needs to
+          // match one of these entries' real "value", regardless of Name.
+          if (value) {
+            const knownValues = parsed.map(function (o) { return o && o.value !== undefined ? String(o.value) : null; }).filter(function (v) { return v !== null; });
+            if (knownValues.indexOf(value) === -1) {
+              err('value', `Value '${value}' doesn't match any Options entry's "value" (${knownValues.join(', ')}).`);
+            }
+          }
+        }
       }
     } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
       try {
