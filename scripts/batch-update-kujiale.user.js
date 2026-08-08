@@ -1808,6 +1808,9 @@
     function checkDeletionDependencies(ed, rows) {
         const deletedNames = new Set(rows.map(r => r.refName));
         const inputs = ed.inputs || [];
+        // Precise pass: sibling ed.inputs, same as before — gives a
+        // specific "referenced in the X of Y" message when the dependency
+        // is another parameter.
         for (const r of rows) {
             const search = '#' + r.refName;
             for (const inp of inputs) {
@@ -1819,6 +1822,22 @@
                 else if (inp.value && String(inp.value).includes(search)) field = 'value';
                 else if (inp.ignore && String(inp.ignore).includes(search)) field = 'hide condition';
                 if (field) return `Cannot delete '${r.refName}' — referenced in the ${field} of '${inp.paramName}'.`;
+            }
+        }
+        // Structural pass: the model's own geometry (frameModels,
+        // moldingPaths, modelInstances, paramModel, etc.) can ALSO
+        // reference a parameter via "#name" directly — confirmed on a real
+        // sample (frameModels' own "size" param held "#W"/"#D"/"#H",
+        // "materialBrandGoodId" held "#CZ"). Deleting a structurally
+        // referenced parameter like W/D/H/CZ used to pass this check
+        // silently and only fail later, server-side, with an unhelpful
+        // generic error ("属性错误").
+        const edWithoutInputs = Object.assign({}, ed);
+        delete edWithoutInputs.inputs; // already covered by the precise pass above
+        const wholeText = JSON.stringify(edWithoutInputs);
+        for (const r of rows) {
+            if (wholeText.includes('#' + r.refName)) {
+                return `Cannot delete '${r.refName}' — it's referenced in the model's own structure (geometry, a part, or similar), not just in another parameter. Removing it would break that reference.`;
             }
         }
         return null;
