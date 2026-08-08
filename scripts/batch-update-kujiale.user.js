@@ -40,7 +40,9 @@
         // new one, matching refName edits that one in place. A blank
         // Reference name always adds (no other reliable key to match on).
         PART_EDIT: { id: 'PART_EDIT', label: 'Add / Edit Parts', color: THEME.success, icon: '🧩', implemented: true },
-        PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: false }
+        // Matches the part to delete by Reference name (row.partRefName) —
+        // same identifier PART_EDIT uses to match an existing part.
+        PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: true }
     };
 
     let currentTask = null;
@@ -481,6 +483,8 @@
                 validateParamDelHeaders(idx);
             } else if (currentTask.id === 'PART_EDIT') {
                 validatePartEditHeaders(idx);
+            } else if (currentTask.id === 'PART_DEL') {
+                validatePartDelHeaders(idx);
             }
 
             // Header errors (missing required COLUMN) block everything —
@@ -494,6 +498,7 @@
                 else if (currentTask.id === 'PARAM_EDIT') validateParamEditRows(rows, idx);
                 else if (currentTask.id === 'PARAM_DEL') validateParamDelRows(rows, idx);
                 else if (currentTask.id === 'PART_EDIT') validatePartEditRows(rows, idx);
+                else if (currentTask.id === 'PART_DEL') validatePartDelRows(rows, idx);
             }
 
             if (headerErrorCount > 0) {
@@ -631,6 +636,10 @@
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
         if (idx.childSerial === -1) addErr('Header', '', '', 'Child Serial Number', "Missing required column 'Child Serial Number'.");
         if (idx.partName === -1) addErr('Header', '', '', 'Part Name', "Missing required column 'Part Name'.");
+    }
+    function validatePartDelHeaders(idx) {
+        if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
+        if (idx.partRefName === -1) addErr('Header', '', '', 'Reference name', "Missing required column 'Reference name'.");
     }
 
     function validateQuoteRows(rows, idx) {
@@ -838,6 +847,17 @@
                     addErr(rowNum, serial, partName, 'Custom Parameters', `Not a valid JSON array of {"paramName":...,"value":...}: ${e.message}`);
                 }
             }
+        }
+    }
+
+    function validatePartDelRows(rows, idx) {
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
+            const rowNum = i + 1;
+            const serial = cell(row, idx.serial);
+            const partRefName = cell(row, idx.partRefName);
+            if (!serial) addErr(rowNum, 'Empty', partRefName, 'Product serial number', 'Model serial ID is empty.');
+            if (!partRefName) addErr(rowNum, serial, 'Empty', 'Reference name', 'Reference name is empty.');
         }
     }
 
@@ -1100,6 +1120,11 @@
                     continue;
                 }
                 map.get(serial).push({ refName });
+                continue;
+            }
+
+            if (taskId === 'PART_DEL') {
+                map.get(serial).push({ partRefName: cell(row, idx.partRefName) });
                 continue;
             }
 
@@ -1909,6 +1934,46 @@
         return null;
     }
 
+    // A part instance is referenced elsewhere as "@refName.field" (e.g.
+    // "@VG.H", "@VG.W" — confirmed on real VDFX/VDFY/VT rows). Boundary
+    // check (not followed by another identifier char) so deleting "VG"
+    // doesn't false-positive on a sibling part named "VG2".
+    function partRefUsed(text, refName) {
+        const escaped = refName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp('@' + escaped + '(?![A-Za-z0-9_])').test(text);
+    }
+
+    function checkPartDeletionDependencies(ed, rows) {
+        const deletedNames = new Set(rows.map(r => r.partRefName));
+        const inputs = ed.inputs || [];
+        // Precise pass: sibling ed.inputs — gives a specific "referenced in
+        // the X of Y" message when the dependency is a top-level parameter
+        // (same idea as checkDeletionDependencies, but for "@refName" part
+        // references instead of "#refName" parameter references).
+        for (const r of rows) {
+            for (const inp of inputs) {
+                let field = null;
+                if (inp.formula && partRefUsed(String(inp.formula), r.partRefName)) field = 'formula';
+                else if (inp.value && partRefUsed(String(inp.value), r.partRefName)) field = 'value';
+                else if (inp.ignore && partRefUsed(String(inp.ignore), r.partRefName)) field = 'hide condition';
+                if (field) return `Cannot delete part '${r.partRefName}' — referenced (as '@${r.partRefName}...') in the ${field} of parameter '${inp.paramName}'.`;
+            }
+        }
+        // Structural pass: other parts' own parameters, frameModels,
+        // moldingPaths, etc. can reference this part too. Exclude the
+        // instances being deleted themselves from the scan (their own
+        // refName obviously appears in their own subtree).
+        const edCopy = _.cloneDeep(ed);
+        edCopy.modelInstances = (edCopy.modelInstances || []).filter(mi => !deletedNames.has(mi.refName));
+        const wholeText = JSON.stringify(edCopy);
+        for (const r of rows) {
+            if (partRefUsed(wholeText, r.partRefName)) {
+                return `Cannot delete part '${r.partRefName}' — it's referenced (as '@${r.partRefName}...') elsewhere in the model (another part, parameter, or structure). Removing it would break that reference.`;
+            }
+        }
+        return null;
+    }
+
     // =========================================================================
     // SECTION 6: EXECUTION ENGINE
     // =========================================================================
@@ -1942,10 +2007,6 @@
         const origin = window.location.origin;
         const tool = currentToolType();
         const hdrs = { "accept": "*/*", "editor-locale": "zh_CN" };
-
-        if (currentTask.id === 'PART_DEL') {
-            return { ok: false, msg: 'Parts deletion not implemented yet.' };
-        }
 
         let resp;
         try {
@@ -1991,6 +2052,15 @@
                 const rowErr = await compilePartEditRow(ed, row);
                 if (rowErr) return { ok: false, msg: rowErr };
             }
+        } else if (currentTask.id === 'PART_DEL') {
+            const missing = data.filter(r => !(ed.modelInstances || []).some(mi => mi.refName === r.partRefName));
+            if (missing.length > 0) {
+                return { ok: false, msg: `Part(s) not found on this model — Reference name(s): ${missing.map(r => r.partRefName).join(', ')}.` };
+            }
+            const depErr = checkPartDeletionDependencies(ed, data);
+            if (depErr) return { ok: false, msg: depErr };
+            const refNames = new Set(data.map(r => r.partRefName));
+            ed.modelInstances = (ed.modelInstances || []).filter(mi => !refNames.has(mi.refName));
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
