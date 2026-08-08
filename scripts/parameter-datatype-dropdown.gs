@@ -793,6 +793,22 @@ function processRow(sheet, row, cols, lastCol) {
 }
 
 /** Run once to backfill the dropdown and live validation on rows that already have data. */
+// Was calling processRow() per row — each call does its own
+// getRange/getValues/getBackgrounds/getNotes plus setBackgrounds/setNotes
+// (and sometimes setValues), so a sheet with N rows meant on the order of
+// 4N+ separate Apps Script API calls, and Apps Script's per-call overhead
+// (not the data itself) is what made this slow (reported as "taking too
+// much time" on a real sheet). Rewritten to read the whole sheet ONCE, do
+// all the validation logic in memory, and write everything back in a
+// small, fixed number of calls regardless of row count.
+//
+// Still scoped to ONLY the Data type column for its dropdown-rule
+// batch-write (sheet.getRange(2, cols.dataType, numRows, 1)) — never touches
+// Parameter Category/Grouping/Parameter type's own validation ranges. That
+// scoping is what fixed the "Chip style keeps changing to Arrow" bug
+// (see processRow's own comment below); batching across rows within that
+// same single column doesn't reintroduce it, since those other columns'
+// ranges are never read or written here at all.
 function refreshAllRows() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(DATA_SHEET_NAME);
@@ -805,9 +821,106 @@ function refreshAllRows() {
   const lastRow = sheet.getLastRow();
   const lastCol = sheet.getLastColumn();
   if (lastRow < 2) return;
-  for (let row = 2; row <= lastRow; row++) {
-    processRow(sheet, row, cols, lastCol);
+
+  const numRows = lastRow - 1;
+  const dataRange = sheet.getRange(2, 1, numRows, lastCol);
+  const values = dataRange.getValues();
+  const backgrounds = dataRange.getBackgrounds();
+  const notes = dataRange.getNotes();
+  let valuesChanged = false;
+
+  // In-memory duplicate-Parameter-Name tracker, built once from the values
+  // already read above — the live per-edit path (buildLiveDuplicateTracker)
+  // does its own getRange calls, which would defeat the whole point of
+  // batching if called once per row in this loop.
+  const duplicateTracker = (cols.serial && cols.paramName) ? {
+    seen: {},
+    isDuplicate: function (serial, refName) {
+      if (!this.seen[serial]) this.seen[serial] = {};
+      if (this.seen[serial][refName]) return true;
+      this.seen[serial][refName] = true;
+      return false;
+    }
+  } : null;
+
+  const dtCol = cols.dataType - 1;
+  const dataTypeValidations = [];
+
+  for (let i = 0; i < numRows; i++) {
+    const rowValues = values[i];
+    const rowBackgrounds = backgrounds[i];
+    const rowNotes = notes[i];
+
+    function cellStr(colKey) {
+      const col = cols[colKey];
+      if (!col) return '';
+      const v = rowValues[col - 1];
+      return (v === null || v === undefined) ? '' : String(v);
+    }
+
+    // --- Data type dropdown rule for this row ---
+    if (cols.dataType && cols.paramType) {
+      const paramType = cellStr('paramType').trim();
+      rowNotes[dtCol] = '';
+      if (!paramType) {
+        dataTypeValidations.push([null]);
+        if (cellStr('dataType').trim() !== '') { rowValues[dtCol] = ''; valuesChanged = true; }
+      } else {
+        const validTypes = TYPE_DATATYPE_MAP[paramType.toLowerCase()];
+        if (!validTypes) {
+          dataTypeValidations.push([null]);
+          rowNotes[dtCol] = 'Unknown Parameter type "' + paramType + '" — not in TYPE_DATATYPE_MAP in the Apps Script.';
+        } else {
+          dataTypeValidations.push([SpreadsheetApp.newDataValidation().requireValueInList(validTypes, true).setAllowInvalid(false).build()]);
+          const current = cellStr('dataType').trim();
+          if (current && validTypes.indexOf(current) === -1) { rowValues[dtCol] = ''; valuesChanged = true; }
+        }
+      }
+    } else {
+      dataTypeValidations.push([null]);
+    }
+
+    // --- Live red/yellow validation ---
+    const rowIssues = [];
+    function field(colKey) {
+      const col = cols[colKey];
+      if (!col) return '';
+      const str = cellStr(colKey);
+      const trimmed = str.trim();
+      if (str !== trimmed && trimmed !== '') {
+        rowIssues.push({ colKey: colKey, severity: 'warning', msg: 'Leading/trailing whitespace — values are trimmed automatically so this still works, but tidy it up if you can.' });
+      }
+      return trimmed;
+    }
+    const rowIsBlank = rowValues.every(function (v) { return v === '' || v === null || v === undefined; });
+    if (!rowIsBlank) validateRowCore(field, rowIssues, duplicateTracker, null);
+
+    VALIDATED_KEYS.forEach(function (key) {
+      const col = cols[key];
+      if (!col) return;
+      rowBackgrounds[col - 1] = '#ffffff';
+      if (key !== 'dataType') rowNotes[col - 1] = '';
+    });
+
+    const cellSeverity = {};
+    rowIssues.forEach(function (issue) {
+      const col = cols[issue.colKey];
+      if (!col) return;
+      const ci = col - 1;
+      if (issue.severity === 'error') cellSeverity[ci] = 'error';
+      else if (cellSeverity[ci] !== 'error') cellSeverity[ci] = 'warning';
+      const tag = issue.severity === 'error' ? 'ERROR: ' : 'WARNING: ';
+      rowNotes[ci] = rowNotes[ci] ? rowNotes[ci] + '\n' + tag + issue.msg : tag + issue.msg;
+    });
+    Object.keys(cellSeverity).forEach(function (ci) {
+      rowBackgrounds[ci] = cellSeverity[ci] === 'error' ? COLOR_ERROR : COLOR_WARNING;
+    });
   }
+
+  dataRange.setBackgrounds(backgrounds);
+  dataRange.setNotes(notes);
+  if (valuesChanged) dataRange.setValues(values);
+  sheet.getRange(2, cols.dataType, numRows, 1).setDataValidations(dataTypeValidations);
 }
 
 function onEdit(e) {
