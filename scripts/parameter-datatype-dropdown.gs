@@ -308,19 +308,29 @@ const OPTION_ENTRY_ALLOWED_KEYS = ['name', 'value', 'ignore'];
 // problems rather than stopping at the first bad one, so a typo on entry 2
 // doesn't hide a numeric mismatch on entry 5.
 //
-// Name and Ignore may be blank ("") — confirmed acceptable. Value may NOT
-// be blank even though the "value" key is present: an empty string there
-// is still a real, meaningful gap (unlike Name/Ignore, every option needs
-// an actual value to select), so it's checked for emptiness specifically,
-// not just for the key being absent.
+// Correction: Name was previously treated as safe to leave blank — that
+// was wrong. Reproduced on a real run: Kujiale's dropdown shows the
+// selected option's "name" as the visible Value label, so a blank name
+// renders the Value field empty in the UI even though "value" itself is
+// set correctly underneath (VT and PFT both did this with blank names).
+// Every confirmed real sample has name matching value (e.g. VT's "No Vent"
+// entry has both name and value set to "No Vent"). Ignore may still be
+// blank — that one's fine. Value may NOT be blank even though the "value"
+// key is present: an empty string there is still a real, meaningful gap,
+// so it's checked for emptiness specifically, not just for the key being
+// absent.
 function validateOptionEntries(parsed, pType, pTypeRaw, colKey, err, warn) {
   parsed.forEach((o, oi) => {
-    if (!o || o.name === undefined || o.value === undefined) {
-      err(colKey, `Options entry ${oi + 1} is missing "name" or "value".`);
+    if (!o || o.value === undefined) {
+      err(colKey, `Options entry ${oi + 1} is missing "value".`);
       return;
     }
     if (String(o.value).trim() === '') {
-      err(colKey, `Options entry ${oi + 1} is missing a Value — Name and Ignore can be left blank, but Value is required.`);
+      err(colKey, `Options entry ${oi + 1} is missing a Value — Ignore can be left blank, but Value is required.`);
+      return;
+    }
+    if (!o.name || String(o.name).trim() === '') {
+      err(colKey, `Options entry ${oi + 1} ("${o.value}") has a blank "name" — Kujiale shows this as the selected Value in the UI, so it needs a real label, typically matching "value".`);
       return;
     }
     Object.keys(o).forEach(function (k) {

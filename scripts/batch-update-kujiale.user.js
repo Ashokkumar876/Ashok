@@ -945,7 +945,16 @@
                             optionsParsed = JSON.parse(optionsRaw);
                             if (!Array.isArray(optionsParsed)) throw new Error('not array');
                             optionsParsed.forEach((o, oi) => {
-                                if (!o || o.name === undefined || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
+                                if (!o || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
+                                // A blank "name" isn't just cosmetic — reproduced on
+                                // a real run: Kujiale's dropdown shows the selected
+                                // option's "name" as the visible Value label, so a
+                                // blank name renders the Value field empty in the UI
+                                // even though the underlying data ("value") is set
+                                // correctly. Every confirmed real sample has name
+                                // matching value (e.g. VT's "No Vent" entry has both
+                                // name and value set to "No Vent").
+                                if (!o.name) throw new Error(`entry ${oi} ("${o.value}") has a blank "name" — Kujiale shows this as the selected Value in the UI, so it needs a real label, typically matching "value"`);
                             });
                         } catch (e) {
                             addErr(rowNum, serial, refName, 'Options', `Options is not a valid JSON array of {name,value}: ${e.message}`);
