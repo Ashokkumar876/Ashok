@@ -50,6 +50,7 @@
     let preValidationErrors = [];
     let lastRunErrors = [];
     let lastDeleteSkippedProtected = []; // refNames of W/D/H/CZ silently skipped on PARAM_DEL
+    let deleteResetValues = new Map(); // serial -> Map<refName, value> — optional reset for a skipped protected param, from the Delete CSV's own Value column
 
     // =========================================================================
     // SECTION 1: TOAST NOTIFICATIONS
@@ -1112,6 +1113,7 @@
     function buildDataMap(taskId, rows, idx, errorRows) {
         const map = new Map();
         lastDeleteSkippedProtected = [];
+        deleteResetValues = new Map();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -1148,6 +1150,16 @@
                 // still goes through the full dependency check.
                 if (PROTECTED_PARAM_NAMES.has(refName) || grouping === 'system parameters') {
                     lastDeleteSkippedProtected.push(refName);
+                    // Kujiale has no confirmed server-side "default value"
+                    // to fetch for these top-level system parameters — so
+                    // rather than guess one, a reset value is only applied
+                    // when the user explicitly supplies it via this row's
+                    // own Value column.
+                    const resetValue = idx.value !== -1 ? cell(row, idx.value) : '';
+                    if (resetValue !== '') {
+                        if (!deleteResetValues.has(serial)) deleteResetValues.set(serial, new Map());
+                        deleteResetValues.get(serial).set(refName, resetValue);
+                    }
                     continue;
                 }
                 map.get(serial).push({ refName });
@@ -2188,6 +2200,17 @@
                 ed.outputConfig.productionParams = ed.outputConfig.productionParams.filter(p => !names.has(p.paramName));
             }
             names.forEach(n => removeFromAllGroups(ed, n));
+            // A system/protected parameter listed in the Delete CSV isn't
+            // actually deleted (see PROTECTED_PARAM_NAMES above) — but if
+            // the row also supplied a Value, reset it to that explicitly
+            // rather than leaving it untouched.
+            const resets = deleteResetValues.get(modelId);
+            if (resets) {
+                for (const [refName, val] of resets) {
+                    const input = (ed.inputs || []).find(i => i.paramName === refName);
+                    if (input) input.value = Utils.normalizeExpr(val);
+                }
+            }
         } else if (currentTask.id === 'PART_EDIT') {
             for (const row of data) {
                 const rowErr = await compilePartEditRow(ed, row);
