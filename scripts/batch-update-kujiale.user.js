@@ -298,6 +298,21 @@
     // attempting (and blocking on) a delete that was never going to work.
     const PROTECTED_PARAM_NAMES = new Set(['W', 'D', 'H', 'CZ']);
 
+    // Confirmed real defaults for the standard Door-category system
+    // parameters (captured from a brand-new, untouched model's own fresh
+    // editorData — these are Kujiale's own server-assigned starting
+    // values, not a guess). W/D/H/CZ deliberately excluded: that fresh
+    // sample came back as a different prodCatId than a typical live model
+    // (695 vs 498) and W's own Max was a plain number there vs a formula
+    // referencing KMFX on a real model, so those four are template/
+    // category-specific and not safe to generalize the same way.
+    const SYSTEM_PARAM_DEFAULTS = {
+        KMFX: '0', BSWZ: '0', BSFX: '0', YG: '0', SYG: '0', XYG: '0', ZYG: '0',
+        YYG: '0', SY: '0', XY: '0', ZY: '0', YY: '0', FX: '0', SJ: '0',
+        MBLX: '0', PTFS: '0', CZFX: '0', CBCZFX: '0',
+        CZPY: '{"x":"0","y":"0"}', CZCC: '{"x":"","y":""}'
+    };
+
     // Position Method's editorOptions are read live off each part (never
     // hardcoded), so whatever language that part's own definition uses is
     // what an exact-name match requires. Some models list these in Chinese
@@ -1150,12 +1165,14 @@
                 // still goes through the full dependency check.
                 if (PROTECTED_PARAM_NAMES.has(refName) || grouping === 'system parameters') {
                     lastDeleteSkippedProtected.push(refName);
-                    // Kujiale has no confirmed server-side "default value"
-                    // to fetch for these top-level system parameters — so
-                    // rather than guess one, a reset value is only applied
-                    // when the user explicitly supplies it via this row's
-                    // own Value column.
-                    const resetValue = idx.value !== -1 ? cell(row, idx.value) : '';
+                    // An explicit Value column always wins. Failing that,
+                    // fall back to SYSTEM_PARAM_DEFAULTS — confirmed real
+                    // values, not a guess — for the names it covers; a
+                    // system parameter outside that table (including
+                    // W/D/H/CZ) with no CSV Value stays untouched, same as
+                    // before.
+                    const explicitValue = idx.value !== -1 ? cell(row, idx.value) : '';
+                    const resetValue = explicitValue !== '' ? explicitValue : (SYSTEM_PARAM_DEFAULTS[refName] || '');
                     if (resetValue !== '') {
                         if (!deleteResetValues.has(serial)) deleteResetValues.set(serial, new Map());
                         deleteResetValues.get(serial).set(refName, resetValue);
