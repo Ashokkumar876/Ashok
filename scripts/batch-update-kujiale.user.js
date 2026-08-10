@@ -1979,17 +1979,33 @@
                 // grouped "System parameters") is being kept regardless —
                 // per user instruction, a stale reference FROM one of
                 // those to something now being deleted is cleaned up
-                // (that one field cleared) instead of blocking the whole
-                // batch. A CUSTOM parameter referencing another custom
-                // parameter being kept is a real design conflict, still
-                // reported instead of silently rewritten.
+                // instead of blocking the whole batch. A CUSTOM parameter
+                // referencing another custom parameter being kept is a
+                // real design conflict, still reported instead of
+                // silently rewritten.
                 if (protectedSet.has(inp.paramName)) {
-                    if (field === 'formula') inp.formula = null;
-                    else if (field === 'link') inp.link = null;
-                    else if (field === 'value') inp.value = '';
-                    else if (field === 'hide condition') inp.ignore = null;
-                    else if (field === 'minimum') inp.min = '';
-                    else if (field === 'maximum') inp.max = '';
+                    // Blanking min/max outright breaks a Range-type
+                    // parameter structurally (Range requires a real
+                    // max/min) — confirmed the hard way: clearing W's max
+                    // to '' after deleting KMFX passed our own check but
+                    // was rejected server-side as "[W] Variable maximum
+                    // boundary error", since a blank max isn't valid on a
+                    // Range param. Substituting the deleted parameter's
+                    // OWN CURRENT VALUE in place of every "#refName" it's
+                    // referenced by keeps the field's math/text valid and
+                    // preserves the parameter's presently-evaluated
+                    // behavior, instead of leaving a dangling reference.
+                    const deletedInput = inputs.find(i => i.paramName === r.refName);
+                    const hasReplacement = deletedInput && deletedInput.value !== undefined && deletedInput.value !== null && deletedInput.value !== '';
+                    const literal = hasReplacement ? String(deletedInput.value) : null;
+                    const re = new RegExp('#' + r.refName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9_])', 'g');
+                    const substitute = (text) => literal !== null ? String(text).replace(re, literal) : null;
+                    if (field === 'formula') inp.formula = substitute(inp.formula);
+                    else if (field === 'link') inp.link = substitute(inp.link);
+                    else if (field === 'value') inp.value = literal !== null ? substitute(inp.value) : '';
+                    else if (field === 'hide condition') inp.ignore = substitute(inp.ignore);
+                    else if (field === 'minimum') inp.min = literal !== null ? substitute(inp.min) : '0';
+                    else if (field === 'maximum') inp.max = literal !== null ? substitute(inp.max) : '0';
                     continue;
                 }
                 return `Cannot delete '${r.refName}' — referenced in the ${field} of '${inp.paramName}'.`;
