@@ -763,9 +763,6 @@
                     if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) {
                         throw new Error('expected {"cases":[...],"defaultValue":...}');
                     }
-                    if (parsed.cases.length === 0) {
-                        addErr(rowNum, serial, partName, 'Style Pack', `Style Pack's "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, drop the Condition JSON wrapper and put the value directly.`);
-                    }
                     const blanks = findBlankConditionCases(parsed);
                     if (blanks.length > 0) {
                         addErr(rowNum, serial, partName, 'Style Pack', `Style Pack has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real style-pack id, not blank.`);
@@ -857,9 +854,6 @@
                             try {
                                 const condParsed = JSON.parse(v);
                                 if (condParsed && Array.isArray(condParsed.cases) && condParsed.defaultValue !== undefined) {
-                                    if (condParsed.cases.length === 0) {
-                                        addErr(rowNum, serial, partName, 'Custom Parameters', `'${entry.paramName}'s "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, drop the Condition JSON wrapper and put the value directly.`);
-                                    }
                                     const blanks = findBlankConditionCases(condParsed);
                                     if (blanks.length > 0) {
                                         addErr(rowNum, serial, partName, 'Custom Parameters', `'${entry.paramName}' has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real value, not blank.`);
@@ -1071,9 +1065,6 @@
                             if (!optionsParsed || !Array.isArray(optionsParsed.cases) || optionsParsed.defaultValue === undefined) {
                                 throw new Error('expected {"cases":[...],"defaultValue":...}');
                             }
-                            if (optionsParsed.cases.length === 0) {
-                                addErr(rowNum, serial, refName, 'Options', `Options' "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, use Range Type = Select and put the value directly instead of a Condition JSON wrapper.`);
-                            }
                             const blanks = findBlankConditionCases(optionsParsed);
                             if (blanks.length > 0) {
                                 addErr(rowNum, serial, refName, 'Options', `Options has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
@@ -1093,9 +1084,6 @@
                         expressionParsed = JSON.parse(expressionRaw);
                         if (!expressionParsed || !Array.isArray(expressionParsed.cases) || expressionParsed.defaultValue === undefined) {
                             throw new Error('expected {"cases":[...],"defaultValue":...}');
-                        }
-                        if (expressionParsed.cases.length === 0) {
-                            addErr(rowNum, serial, refName, 'Expression', `Expression's "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, use Expression Type = Reference and put the value directly instead of a Condition JSON wrapper.`);
                         }
                         const blanks = findBlankConditionCases(expressionParsed);
                         if (blanks.length > 0) {
