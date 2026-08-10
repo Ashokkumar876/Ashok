@@ -1133,15 +1133,20 @@
 
             if (taskId === 'PARAM_DEL') {
                 const refName = cell(row, idx.paramName);
+                const grouping = String(cell(row, idx.grouping) || '').toLowerCase().replace(/\s+/g, ' ').trim();
                 // W/D/H/CZ are the model's own Basic/System parameters —
                 // always structurally referenced (frameModels' own "size"
                 // holds "#W"/"#D"/"#H", "materialBrandGoodId" holds "#CZ")
                 // so a delete would never actually succeed. Per user
                 // instruction, silently skip these rather than blocking
-                // the whole batch; every other (custom/local/global)
+                // the whole batch — same treatment now extended to any row
+                // whose Grouping column reads "System parameters" (when
+                // that column is present), since the user confirmed the
+                // whole group should be left alone the same way, not just
+                // these four names. Every other (custom/local/global)
                 // parameter in the same CSV still deletes normally and
                 // still goes through the full dependency check.
-                if (PROTECTED_PARAM_NAMES.has(refName)) {
+                if (PROTECTED_PARAM_NAMES.has(refName) || grouping === 'system parameters') {
                     lastDeleteSkippedProtected.push(refName);
                     continue;
                 }
