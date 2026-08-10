@@ -1931,9 +1931,10 @@
         return `${base}_${instanceId}`;
     }
 
-    function checkDeletionDependencies(ed, rows) {
+    function checkDeletionDependencies(ed, rows, protectedNames) {
         const deletedNames = new Set(rows.map(r => r.refName));
         const inputs = ed.inputs || [];
+        const protectedSet = protectedNames || new Set();
         // Precise pass: sibling ed.inputs, same as before — gives a
         // specific "referenced in the X of Y" message when the dependency
         // is another parameter.
@@ -1954,7 +1955,25 @@
                 // failed server-side with "Variable maximum boundary error".
                 else if (inp.min && String(inp.min).includes(search)) field = 'minimum';
                 else if (inp.max && String(inp.max).includes(search)) field = 'maximum';
-                if (field) return `Cannot delete '${r.refName}' — referenced in the ${field} of '${inp.paramName}'.`;
+                if (!field) continue;
+                // A protected/system parameter (W/D/H/CZ, or anything
+                // grouped "System parameters") is being kept regardless —
+                // per user instruction, a stale reference FROM one of
+                // those to something now being deleted is cleaned up
+                // (that one field cleared) instead of blocking the whole
+                // batch. A CUSTOM parameter referencing another custom
+                // parameter being kept is a real design conflict, still
+                // reported instead of silently rewritten.
+                if (protectedSet.has(inp.paramName)) {
+                    if (field === 'formula') inp.formula = null;
+                    else if (field === 'link') inp.link = null;
+                    else if (field === 'value') inp.value = '';
+                    else if (field === 'hide condition') inp.ignore = null;
+                    else if (field === 'minimum') inp.min = '';
+                    else if (field === 'maximum') inp.max = '';
+                    continue;
+                }
+                return `Cannot delete '${r.refName}' — referenced in the ${field} of '${inp.paramName}'.`;
             }
         }
         // Structural pass: the model's own geometry (frameModels,
@@ -2121,7 +2140,8 @@
             }
             selfHealReferencedVars(ed);
         } else if (currentTask.id === 'PARAM_DEL') {
-            const depErr = checkDeletionDependencies(ed, data);
+            const protectedNames = new Set([...PROTECTED_PARAM_NAMES, ...lastDeleteSkippedProtected]);
+            const depErr = checkDeletionDependencies(ed, data, protectedNames);
             if (depErr) return { ok: false, msg: depErr };
             const names = new Set(data.map(r => r.refName));
             ed.inputs = (ed.inputs || []).filter(inp => !names.has(inp.paramName));
