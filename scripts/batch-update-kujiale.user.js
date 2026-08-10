@@ -1942,6 +1942,13 @@
                 else if (inp.link && String(inp.link).includes(search)) field = 'link';
                 else if (inp.value && String(inp.value).includes(search)) field = 'value';
                 else if (inp.ignore && String(inp.ignore).includes(search)) field = 'hide condition';
+                // A Range parameter's own Minimum/Maximum can hold a "#ref"
+                // formula (e.g. Width's Max was "#KMFX == 0 ... ? 600 :
+                // 1200") — missed here before, so deleting KMFX while W
+                // stayed (protected) passed this check silently and only
+                // failed server-side with "Variable maximum boundary error".
+                else if (inp.min && String(inp.min).includes(search)) field = 'minimum';
+                else if (inp.max && String(inp.max).includes(search)) field = 'maximum';
                 if (field) return `Cannot delete '${r.refName}' — referenced in the ${field} of '${inp.paramName}'.`;
             }
         }
