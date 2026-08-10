@@ -594,6 +594,9 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
         try {
           const parsed = JSON.parse(optionsRaw);
           if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
+          if (parsed.cases.length === 0) {
+            err('options', `Options' "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, use Range Type = Select and put the value directly instead of a Condition JSON wrapper.`);
+          }
           const blanks = findBlankConditionCases(parsed);
           if (blanks.length > 0) {
             err('options', `Options has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
@@ -609,6 +612,9 @@ function validateRowCore(field, issues, duplicateTracker, refResolver) {
       try {
         const parsed = JSON.parse(expressionRaw);
         if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
+        if (parsed.cases.length === 0) {
+          err('expression', `Expression's "cases" array is empty (confirmed real cause of a server-side "属性错误" on a live run — Kujiale expects at least one case, even for what's really just a single default). If there's no actual branching, use Expression Type = Reference and put the value directly instead of a Condition JSON wrapper.`);
+        }
         const blanks = findBlankConditionCases(parsed);
         if (blanks.length > 0) {
           err('expression', `Expression has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real asset id or a '#'/'@' reference, not blank.`);
