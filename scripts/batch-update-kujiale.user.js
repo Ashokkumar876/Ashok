@@ -82,7 +82,20 @@
         // substitution — pass the expression through as-is, just trimmed.
         normalizeExpr: (str) => {
             if (!str || typeof str !== "string") return str;
-            return str.trim();
+            const trimmed = str.trim();
+            // A bare boolean literal (the WHOLE field, e.g. a Hide condition
+            // that's simply "always true") — confirmed real editorData
+            // always stores this as lowercase "true"/"false" verbatim.
+            // Spreadsheet software (Excel/Sheets) can silently
+            // auto-capitalize a lone "true" to "TRUE" on edit/paste, and a
+            // live run with that produced a raw server crash instead of a
+            // normal rejection. Only an EXACT whole-field match is touched
+            // here — "true"/"false" used inside a larger expression (e.g. a
+            // ternary's branches, confirmed to use uppercase TRUE/FALSE in
+            // real data — a different, correct convention) is left as-is.
+            if (/^true$/i.test(trimmed)) return 'true';
+            if (/^false$/i.test(trimmed)) return 'false';
+            return trimmed;
         },
         // Handles both a JSON {"cases":[...]} formula-settings blob and a plain
         // JS-ish expression string ("#W < 50 ? 50 : 10") — both are valid
