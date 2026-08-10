@@ -1566,6 +1566,16 @@
                 if (row.expressionType === 'condition') {
                     input.formula = buildAssetFormulaConditionJson(row.expressionParsed, pType);
                     input.formulaForm = 1;
+                    // When Default state = Formula, a real successfully-saved
+                    // sample shows `value` mirrors the formula's own
+                    // defaultValue — not the Value column, which belongs to
+                    // the link/Select side and can reference a completely
+                    // different asset than the formula's cases. Sending the
+                    // link-side asset while status:1 tells the server "trust
+                    // the formula" is a real mismatch, not just cosmetic.
+                    if (row.defaultState === 'formula' && row.expressionParsed && row.expressionParsed.defaultValue !== undefined) {
+                        input.value = Utils.wrapAssetValue(row.expressionParsed.defaultValue, pType);
+                    }
                 } else {
                     input.formula = Utils.normalizeExpr(row.expressionRaw);
                     input.formulaForm = 0;
