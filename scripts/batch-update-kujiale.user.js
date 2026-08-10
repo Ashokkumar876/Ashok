@@ -1448,6 +1448,15 @@
         let input = ed.inputs.find(i => i.paramName === row.refName);
         if (!input) { input = newInputSkeleton(row.refName, row.displayName); ed.inputs.push(input); }
 
+        // A row being compiled here always carries a real, user-authored
+        // definition — even when `input` started life as a bare
+        // selfHealReferencedVars() placeholder (generated:true). Every
+        // confirmed real sample (native-UI-created, round-tripped through
+        // Kujiale successfully) shows generated:false; leaving a stale
+        // generated:true on a promoted stub sends the server a fully-formed
+        // complex definition still flagged as an internal auto-placeholder.
+        input.generated = false;
+
         if (row.isGlobalRow) {
             const libId = currentLibraryId();
             if (!libId) return `Cannot resolve Global parameter '${row.refName}' — this page's URL has no extendlibraryid.`;
