@@ -51,6 +51,8 @@
     let lastRunErrors = [];
     let lastDeleteSkippedProtected = []; // refNames of W/D/H/CZ silently skipped on PARAM_DEL
     let deleteResetValues = new Map(); // serial -> Map<refName, value> — optional reset for a skipped protected param, from the Delete CSV's own Value column
+    let deleteProtectedNamesPerModel = new Map(); // serial -> Set<refName> — every protected/system param name skipped on PARAM_DEL for that model, whether or not the CSV gave it an explicit Value
+    let categoryDefaultsCache = new Map(); // prodCatId -> Promise<Map<paramName, value>> — live template defaults, fetched once per category and reused
 
     // =========================================================================
     // SECTION 1: TOAST NOTIFICATIONS
@@ -1129,6 +1131,7 @@
         const map = new Map();
         lastDeleteSkippedProtected = [];
         deleteResetValues = new Map();
+        deleteProtectedNamesPerModel = new Map();
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -1165,17 +1168,18 @@
                 // still goes through the full dependency check.
                 if (PROTECTED_PARAM_NAMES.has(refName) || grouping === 'system parameters') {
                     lastDeleteSkippedProtected.push(refName);
-                    // An explicit Value column always wins. Failing that,
-                    // fall back to SYSTEM_PARAM_DEFAULTS — confirmed real
-                    // values, not a guess — for the names it covers; a
-                    // system parameter outside that table (including
-                    // W/D/H/CZ) with no CSV Value stays untouched, same as
-                    // before.
+                    if (!deleteProtectedNamesPerModel.has(serial)) deleteProtectedNamesPerModel.set(serial, new Set());
+                    deleteProtectedNamesPerModel.get(serial).add(refName);
+                    // An explicit Value column always wins over any
+                    // fetched/hardcoded default — captured here; the
+                    // actual reset (explicit > live category default >
+                    // hardcoded fallback) is resolved later in
+                    // processModel, since fetching live defaults needs a
+                    // network round-trip this synchronous pass can't make.
                     const explicitValue = idx.value !== -1 ? cell(row, idx.value) : '';
-                    const resetValue = explicitValue !== '' ? explicitValue : (SYSTEM_PARAM_DEFAULTS[refName] || '');
-                    if (resetValue !== '') {
+                    if (explicitValue !== '') {
                         if (!deleteResetValues.has(serial)) deleteResetValues.set(serial, new Map());
-                        deleteResetValues.get(serial).set(refName, resetValue);
+                        deleteResetValues.get(serial).set(refName, explicitValue);
                     }
                     continue;
                 }
@@ -1423,6 +1427,47 @@
     // globalinput/new request used, confirmed by network capture.
     function currentLibraryId() {
         return new URLSearchParams(window.location.search).get('extendlibraryid') || '';
+    }
+
+    // The page's own `libid` query param — confirmed as the
+    // "customLibraryId" the template/new endpoint expects, by network
+    // capture of the "create new model" flow.
+    function currentCustomLibraryId() {
+        return new URLSearchParams(window.location.search).get('libid') || '';
+    }
+
+    // Live, read-only source for a system parameter's real default value —
+    // GET .../editordata/template/new?prodcatid=...&obsLibraryId=...&
+    // customLibraryId=..., the same endpoint Kujiale's own editor calls
+    // when spinning up a brand-new model of a category, confirmed by
+    // network capture. Unlike actually creating a new model, this one
+    // comes back with an empty paramModelInfo and no "model" block — it's
+    // a pure template lookup with no side effects. Cached per prodCatId
+    // (as a Promise, so concurrent callers share one in-flight fetch)
+    // since the defaults don't change between models of the same category
+    // within a single run.
+    async function fetchCategoryDefaults(prodCatId) {
+        if (categoryDefaultsCache.has(prodCatId)) return categoryDefaultsCache.get(prodCatId);
+        const promise = (async () => {
+            const origin = window.location.origin;
+            const obsLibraryId = currentLibraryId();
+            const customLibraryId = currentCustomLibraryId();
+            const url = `${origin}/editor/api/site/editordata/template/new?prodcatid=${encodeURIComponent(prodCatId)}&obsLibraryId=${encodeURIComponent(obsLibraryId)}&customLibraryId=${encodeURIComponent(customLibraryId)}`;
+            const resp = await fetch(url, {
+                method: 'GET',
+                credentials: 'include',
+                mode: 'cors',
+                headers: { accept: '*/*', 'editor-locale': 'en_IN', 'x-qh-locale': 'en_IN', 'x-qh-site': 'coohom' }
+            });
+            if (!resp.ok) throw new Error(`template/new lookup failed, status ${resp.status}`);
+            const json = await resp.json();
+            const inputs = (json.editorData && json.editorData.inputs) || [];
+            const map = new Map();
+            inputs.forEach(inp => { if (inp.paramName) map.set(inp.paramName, inp.value); });
+            return map;
+        })();
+        categoryDefaultsCache.set(prodCatId, promise);
+        return promise;
     }
 
     // Fetches a global parameter's full definition from the same endpoint
@@ -2218,14 +2263,29 @@
             }
             names.forEach(n => removeFromAllGroups(ed, n));
             // A system/protected parameter listed in the Delete CSV isn't
-            // actually deleted (see PROTECTED_PARAM_NAMES above) — but if
-            // the row also supplied a Value, reset it to that explicitly
-            // rather than leaving it untouched.
-            const resets = deleteResetValues.get(modelId);
-            if (resets) {
-                for (const [refName, val] of resets) {
+            // actually deleted (see PROTECTED_PARAM_NAMES above) — reset it
+            // instead, preferring (in order): an explicit Value from the
+            // CSV row itself; the live category default fetched from
+            // Kujiale's own template/new endpoint; the hardcoded
+            // SYSTEM_PARAM_DEFAULTS fallback, in case that fetch fails.
+            // Nothing found in any of the three leaves it untouched, same
+            // as always.
+            const protectedThisModel = deleteProtectedNamesPerModel.get(modelId);
+            if (protectedThisModel && protectedThisModel.size > 0) {
+                const explicitResets = deleteResetValues.get(modelId) || new Map();
+                let liveDefaults = null;
+                try {
+                    liveDefaults = await fetchCategoryDefaults(CONFIG.PRODCATID);
+                } catch (e) {
+                    liveDefaults = null; // network/endpoint failure — fall through to the hardcoded table
+                }
+                for (const refName of protectedThisModel) {
+                    const val = explicitResets.has(refName) ? explicitResets.get(refName)
+                        : (liveDefaults && liveDefaults.has(refName)) ? liveDefaults.get(refName)
+                        : SYSTEM_PARAM_DEFAULTS[refName];
+                    if (val === undefined || val === null || val === '') continue;
                     const input = (ed.inputs || []).find(i => i.paramName === refName);
-                    if (input) input.value = Utils.normalizeExpr(val);
+                    if (input) input.value = Utils.normalizeExpr(String(val));
                 }
             }
         } else if (currentTask.id === 'PART_EDIT') {
