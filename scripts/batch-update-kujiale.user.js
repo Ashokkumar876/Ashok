@@ -300,21 +300,6 @@
     // attempting (and blocking on) a delete that was never going to work.
     const PROTECTED_PARAM_NAMES = new Set(['W', 'D', 'H', 'CZ']);
 
-    // Confirmed real defaults for the standard Door-category system
-    // parameters (captured from a brand-new, untouched model's own fresh
-    // editorData — these are Kujiale's own server-assigned starting
-    // values, not a guess). W/D/H/CZ deliberately excluded: that fresh
-    // sample came back as a different prodCatId than a typical live model
-    // (695 vs 498) and W's own Max was a plain number there vs a formula
-    // referencing KMFX on a real model, so those four are template/
-    // category-specific and not safe to generalize the same way.
-    const SYSTEM_PARAM_DEFAULTS = {
-        KMFX: '0', BSWZ: '0', BSFX: '0', YG: '0', SYG: '0', XYG: '0', ZYG: '0',
-        YYG: '0', SY: '0', XY: '0', ZY: '0', YY: '0', FX: '0', SJ: '0',
-        MBLX: '0', PTFS: '0', CZFX: '0', CBCZFX: '0',
-        CZPY: '{"x":"0","y":"0"}', CZCC: '{"x":"","y":""}'
-    };
-
     // Position Method's editorOptions are read live off each part (never
     // hardcoded), so whatever language that part's own definition uses is
     // what an exact-name match requires. Some models list these in Chinese
@@ -2265,11 +2250,11 @@
             // A system/protected parameter listed in the Delete CSV isn't
             // actually deleted (see PROTECTED_PARAM_NAMES above) — reset it
             // instead, preferring (in order): an explicit Value from the
-            // CSV row itself; the live category default fetched from
-            // Kujiale's own template/new endpoint; the hardcoded
-            // SYSTEM_PARAM_DEFAULTS fallback, in case that fetch fails.
-            // Nothing found in any of the three leaves it untouched, same
-            // as always.
+            // CSV row itself, then the live category default fetched from
+            // Kujiale's own template/new endpoint. No hardcoded fallback —
+            // if the live fetch fails, that parameter is simply left
+            // untouched (same as if it were never listed) rather than
+            // guessing a value.
             const protectedThisModel = deleteProtectedNamesPerModel.get(modelId);
             if (protectedThisModel && protectedThisModel.size > 0) {
                 const explicitResets = deleteResetValues.get(modelId) || new Map();
@@ -2277,12 +2262,12 @@
                 try {
                     liveDefaults = await fetchCategoryDefaults(CONFIG.PRODCATID);
                 } catch (e) {
-                    liveDefaults = null; // network/endpoint failure — fall through to the hardcoded table
+                    liveDefaults = null; // live lookup failed — nothing to fall back to, leave unresolved names untouched
                 }
                 for (const refName of protectedThisModel) {
                     const val = explicitResets.has(refName) ? explicitResets.get(refName)
                         : (liveDefaults && liveDefaults.has(refName)) ? liveDefaults.get(refName)
-                        : SYSTEM_PARAM_DEFAULTS[refName];
+                        : undefined;
                     if (val === undefined || val === null || val === '') continue;
                     const input = (ed.inputs || []).find(i => i.paramName === refName);
                     if (input) input.value = Utils.normalizeExpr(String(val));
