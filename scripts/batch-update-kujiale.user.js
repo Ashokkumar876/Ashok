@@ -2295,8 +2295,24 @@
                     const templateEntry = liveDefaults && liveDefaults.get(refName);
                     if (!templateEntry) continue;
                     if (PROTECTED_PARAM_NAMES.has(refName)) {
-                        const { id, extAttr, ...rest } = templateEntry;
-                        Object.assign(input, rest);
+                        // Object.assign alone only OVERWRITES keys present
+                        // in templateEntry — it can't CLEAR a key the live
+                        // model customized that the template simply never
+                        // had (e.g. D's "formula":"@MF18.PTH", or CZ's
+                        // conditional "link" + linkForm:1). Left in place,
+                        // that stale field coexists with the template's new
+                        // paramTypeId and produces an inconsistent hybrid —
+                        // confirmed as the actual cause of "公式执行失败":
+                        // a Range-typed D still carrying an active formula,
+                        // an Unlimited-typed CZ still carrying an active
+                        // conditional link. Starting from a neutral
+                        // skeleton first guarantees every field the
+                        // template doesn't specify is genuinely cleared,
+                        // not just left behind.
+                        const neutral = newInputSkeleton(refName, input.displayName || refName);
+                        const preservedId = input.id;
+                        const preservedExtAttr = input.extAttr;
+                        Object.assign(input, neutral, templateEntry, { id: preservedId, extAttr: preservedExtAttr, paramName: refName });
                     } else {
                         if (templateEntry.value === undefined || templateEntry.value === null || templateEntry.value === '') continue;
                         input.value = templateEntry.value;
