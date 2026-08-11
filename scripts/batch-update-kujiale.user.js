@@ -1447,8 +1447,12 @@
             if (!resp.ok) throw new Error(`template/new lookup failed, status ${resp.status}`);
             const json = await resp.json();
             const inputs = (json.editorData && json.editorData.inputs) || [];
+            // Store the whole template entry, not just its value — W/D/H/CZ
+            // need a full structural reset (see the PARAM_DEL reset logic),
+            // since their shape (paramTypeId/formula) can legitimately
+            // differ between a fresh template and a customized live model.
             const map = new Map();
-            inputs.forEach(inp => { if (inp.paramName) map.set(inp.paramName, inp.value); });
+            inputs.forEach(inp => { if (inp.paramName) map.set(inp.paramName, inp); });
             return map;
         })();
         categoryDefaultsCache.set(prodCatId, promise);
@@ -2256,20 +2260,23 @@
             // untouched (same as if it were never listed) rather than
             // guessing a value.
             //
-            // W/D/H/CZ are excluded from the live-default auto-apply —
-            // confirmed the hard way: the template's D is a plain Range
-            // float, but a real model's D can be Formula-driven (e.g.
-            // "@MF18.PTH", paramTypeId 5) — forcing the template's literal
-            // value onto a Formula-shaped D got rejected server-side
-            // ("[D] Invalid parameter value"), and W's own real value (598)
-            // was silently overwritten by the template's fresh-model
-            // default (600) in the same run before that error was caught.
-            // These four keep the requirement that an explicit CSV Value
-            // is the only way to reset them.
+            // For W/D/H/CZ specifically, a live-default reset replaces the
+            // ENTIRE definition (paramTypeId/formula/link/min/max/etc.),
+            // not just the value — confirmed necessary the hard way: the
+            // template's D is a plain Range float, but a real model's D
+            // can be Formula-driven ("@MF18.PTH", paramTypeId 5), and
+            // forcing just the template's literal value onto that shape
+            // got rejected server-side ("[D] Invalid parameter value").
+            // `id` and `extAttr` (which carries the Locked-condition flag)
+            // are preserved from the live entry regardless, since those
+            // are per-model identity/state, not part of what "default"
+            // means. Every other protected name (KMFX, BSWZ, etc.) keeps
+            // the simpler value-only reset, since their shape never
+            // varies between a template and a live model.
             const protectedThisModel = deleteProtectedNamesPerModel.get(modelId);
             if (protectedThisModel && protectedThisModel.size > 0) {
                 const explicitResets = deleteResetValues.get(modelId) || new Map();
-                const needsLiveLookup = [...protectedThisModel].some(n => !explicitResets.has(n) && !PROTECTED_PARAM_NAMES.has(n));
+                const needsLiveLookup = [...protectedThisModel].some(n => !explicitResets.has(n));
                 let liveDefaults = null;
                 if (needsLiveLookup) {
                     try {
@@ -2279,12 +2286,21 @@
                     }
                 }
                 for (const refName of protectedThisModel) {
-                    const val = explicitResets.has(refName) ? explicitResets.get(refName)
-                        : (!PROTECTED_PARAM_NAMES.has(refName) && liveDefaults && liveDefaults.has(refName)) ? liveDefaults.get(refName)
-                        : undefined;
-                    if (val === undefined || val === null || val === '') continue;
                     const input = (ed.inputs || []).find(i => i.paramName === refName);
-                    if (input) input.value = Utils.normalizeExpr(String(val));
+                    if (!input) continue;
+                    if (explicitResets.has(refName)) {
+                        input.value = Utils.normalizeExpr(String(explicitResets.get(refName)));
+                        continue;
+                    }
+                    const templateEntry = liveDefaults && liveDefaults.get(refName);
+                    if (!templateEntry) continue;
+                    if (PROTECTED_PARAM_NAMES.has(refName)) {
+                        const { id, extAttr, ...rest } = templateEntry;
+                        Object.assign(input, rest);
+                    } else {
+                        if (templateEntry.value === undefined || templateEntry.value === null || templateEntry.value === '') continue;
+                        input.value = templateEntry.value;
+                    }
                 }
             }
         } else if (currentTask.id === 'PART_EDIT') {
