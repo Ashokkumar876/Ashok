@@ -2255,18 +2255,32 @@
             // if the live fetch fails, that parameter is simply left
             // untouched (same as if it were never listed) rather than
             // guessing a value.
+            //
+            // W/D/H/CZ are excluded from the live-default auto-apply —
+            // confirmed the hard way: the template's D is a plain Range
+            // float, but a real model's D can be Formula-driven (e.g.
+            // "@MF18.PTH", paramTypeId 5) — forcing the template's literal
+            // value onto a Formula-shaped D got rejected server-side
+            // ("[D] Invalid parameter value"), and W's own real value (598)
+            // was silently overwritten by the template's fresh-model
+            // default (600) in the same run before that error was caught.
+            // These four keep the requirement that an explicit CSV Value
+            // is the only way to reset them.
             const protectedThisModel = deleteProtectedNamesPerModel.get(modelId);
             if (protectedThisModel && protectedThisModel.size > 0) {
                 const explicitResets = deleteResetValues.get(modelId) || new Map();
+                const needsLiveLookup = [...protectedThisModel].some(n => !explicitResets.has(n) && !PROTECTED_PARAM_NAMES.has(n));
                 let liveDefaults = null;
-                try {
-                    liveDefaults = await fetchCategoryDefaults(CONFIG.PRODCATID);
-                } catch (e) {
-                    liveDefaults = null; // live lookup failed — nothing to fall back to, leave unresolved names untouched
+                if (needsLiveLookup) {
+                    try {
+                        liveDefaults = await fetchCategoryDefaults(CONFIG.PRODCATID);
+                    } catch (e) {
+                        liveDefaults = null; // live lookup failed — nothing to fall back to, leave unresolved names untouched
+                    }
                 }
                 for (const refName of protectedThisModel) {
                     const val = explicitResets.has(refName) ? explicitResets.get(refName)
-                        : (liveDefaults && liveDefaults.has(refName)) ? liveDefaults.get(refName)
+                        : (!PROTECTED_PARAM_NAMES.has(refName) && liveDefaults && liveDefaults.has(refName)) ? liveDefaults.get(refName)
                         : undefined;
                     if (val === undefined || val === null || val === '') continue;
                     const input = (ed.inputs || []).find(i => i.paramName === refName);
