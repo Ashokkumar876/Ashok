@@ -25,9 +25,10 @@
     // just find their attributeId the same way (Network tab -> save request -> Payload).
     const ATTRIBUTE_MAP = {
         'MTY': 19040,
-        'MTH': 19042,
-        'MSFC': 19043,
-        'MDC': 19044,
+        'MFC': 19045,
+        'MTH': 19046,
+        'MSC': 19047,
+        'MGC': 19048,
         'EBBC': 19024,
         'EBAC': 19025,
         'EBBN': 19026,

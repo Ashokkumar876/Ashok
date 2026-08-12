@@ -1,4 +1,4 @@
-ProductID,MaterialName,MTY,MTH,MSFC,MDC,EBBC,EBAC,EBBN,ENIC,EBGC,EB_22_0p8,EB_22_1p0,EB_22_2p0,EB_23_1p0,EB_23_1p3,EB_25_1p3,EB_30_0p8,EB_30_2p0,EB_45_0p8,EB_45_2p0
-123456,Sample Material A,Wood,18mm,12.50,2.00,BR001,ART-001,BrandOne,INT-001,1.50,0.80,1.00,2.00,1.00,1.30,1.30,0.80,2.00,0.80,2.00
-123457,Sample Material B,Laminate,,,,,,,,,,,,,,,,,,
-123458,Sample Material C,,,,,,,,,,,,,,,,,,DELETE,
+ProductID,MaterialName,MTY,MFC,MTH,MSC,MGC,EBBC,EBAC,EBBN,ENIC,EBGC,EB_22_0p8,EB_22_1p0,EB_22_2p0,EB_23_1p0,EB_23_1p3,EB_25_1p3,EB_30_0p8,EB_30_2p0,EB_45_0p8,EB_45_2p0
+123456,Sample Material A,Wood,Glossy,18mm,12.50,2.00,BR001,ART-001,BrandOne,INT-001,1.50,0.80,1.00,2.00,1.00,1.30,1.30,0.80,2.00,0.80,2.00
+123457,Sample Material B,Laminate,Matt,,,,,,,,,,,,,,,,,,
+123458,Sample Material C,,,,,,,,,,,,,,,,,,,DELETE,
