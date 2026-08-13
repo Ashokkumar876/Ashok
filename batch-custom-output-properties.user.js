@@ -545,13 +545,27 @@
         return res.d.result || [];
     }
 
+    // Custom output properties should list Core Material, Top Surface, Bottom Surface,
+    // then Edge Band first, in that order; everything else follows in its original order.
+    const PRIORITY_KEY_ORDER = ['CM', 'TS', 'BS', 'EB'];
+
+    function sortPropertyOptions(options) {
+        return [...options].sort((a, b) => {
+            const aRank = PRIORITY_KEY_ORDER.indexOf(a.propertyKey);
+            const bRank = PRIORITY_KEY_ORDER.indexOf(b.propertyKey);
+            const aScore = aRank === -1 ? PRIORITY_KEY_ORDER.length : aRank;
+            const bScore = bRank === -1 ? PRIORITY_KEY_ORDER.length : bRank;
+            return aScore - bScore;
+        });
+    }
+
     async function main() {
         const btn = createMainButton();
         btn.onclick = async () => {
             btn.disabled = true;
             btn.textContent = 'Loading...';
             try {
-                const propertyOptions = await fetchBizPropertyOptions();
+                const propertyOptions = sortPropertyOptions(await fetchBizPropertyOptions());
                 await showModal(propertyOptions);
             } catch (e) {
                 alert('Error: ' + e.message);
