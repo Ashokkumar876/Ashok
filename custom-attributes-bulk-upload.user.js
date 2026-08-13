@@ -206,9 +206,10 @@
         return results;
     }
 
-    // ===== Position/minimized state persistence (so the panel stays put across page refreshes) =====
+    // ===== Position/open state persistence (so the panel stays a small button, in the same
+    // spot, across page refreshes, instead of popping open over the page every time) =====
     const POS_KEY = '__batchAttrPanelPos';
-    const MINIMIZED_KEY = '__batchAttrPanelMinimized';
+    const OPEN_KEY = '__batchAttrPanelOpen';
 
     function loadPosition() {
         try {
@@ -220,15 +221,31 @@
     function savePosition(left, top) {
         try { localStorage.setItem(POS_KEY, JSON.stringify({ left, top })); } catch (e) { /* storage unavailable */ }
     }
-    function loadMinimized() {
-        return localStorage.getItem(MINIMIZED_KEY) === '1';
+    function loadOpen() {
+        return localStorage.getItem(OPEN_KEY) === '1';
     }
-    function saveMinimized(minimized) {
-        try { localStorage.setItem(MINIMIZED_KEY, minimized ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+    function saveOpen(open) {
+        try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch (e) { /* storage unavailable */ }
     }
 
     // ===== UI =====
-    function createPanel() {
+    function createToggleButton(onOpen) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = '🧩';
+        btn.title = 'Open Batch Attribute Updater';
+        Object.assign(btn.style, {
+            position: 'fixed', top: '10px', right: '20px', width: '46px', height: '46px',
+            borderRadius: '50%', border: 'none', background: '#1890ff', color: '#fff',
+            fontSize: '20px', lineHeight: '46px', textAlign: 'center', padding: '0',
+            cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 999999,
+        });
+        btn.addEventListener('click', onOpen);
+        document.body.appendChild(btn);
+        return btn;
+    }
+
+    function createPanel(onClose) {
         const panel = document.createElement('div');
         Object.assign(panel.style, {
             position: 'fixed', top: '10px', right: '20px', width: '320px', maxHeight: '80vh',
@@ -258,20 +275,13 @@
         Object.assign(moveHandle.style, { fontWeight: 'bold', cursor: 'grab' });
         header.appendChild(moveHandle);
 
-        const btnGroup = document.createElement('span');
-        Object.assign(btnGroup.style, { display: 'flex', gap: '10px', alignItems: 'center' });
-
-        const minimizeBtn = document.createElement('span');
-        minimizeBtn.style.cursor = 'pointer';
-        btnGroup.appendChild(minimizeBtn);
-
         const closeBtn = document.createElement('span');
         closeBtn.textContent = '✕';
+        closeBtn.title = 'Close (reopen from the button)';
         closeBtn.style.cursor = 'pointer';
-        closeBtn.onclick = () => { panel.style.display = 'none'; };
-        btnGroup.appendChild(closeBtn);
+        closeBtn.onclick = () => { panel.remove(); onClose(); };
+        header.appendChild(closeBtn);
 
-        header.appendChild(btnGroup);
         panel.appendChild(header);
 
         const body = document.createElement('div');
@@ -294,15 +304,6 @@
         panel.appendChild(body);
         document.body.appendChild(panel);
         makeDraggable(panel, moveHandle);
-
-        function setMinimized(minimized) {
-            body.style.display = minimized ? 'none' : '';
-            minimizeBtn.textContent = minimized ? '▢' : '－';
-            minimizeBtn.title = minimized ? 'Expand' : 'Minimize';
-            saveMinimized(minimized);
-        }
-        minimizeBtn.onclick = () => setMinimized(body.style.display !== 'none');
-        setMinimized(loadMinimized());
 
         let parsedJobs = [];
 
@@ -362,6 +363,8 @@
             Object.assign(a.style, { display: 'block', marginTop: '8px', color: '#1890ff' });
             log.parentElement.insertBefore(a, log);
         });
+
+        return panel;
     }
 
     function makeDraggable(panel, handle) {
@@ -387,9 +390,28 @@
         });
     }
 
+    function init() {
+        let panel = null;
+        let toggleBtn = null;
+
+        function openPanel() {
+            if (toggleBtn) { toggleBtn.remove(); toggleBtn = null; }
+            panel = createPanel(closePanel);
+            saveOpen(true);
+        }
+        function closePanel() {
+            if (panel) { panel.remove(); panel = null; }
+            toggleBtn = createToggleButton(openPanel);
+            saveOpen(false);
+        }
+
+        // Starts as just the small button unless the user had it open when they last left.
+        if (loadOpen()) openPanel(); else closePanel();
+    }
+
     if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', createPanel);
+        window.addEventListener('DOMContentLoaded', init);
     } else {
-        createPanel();
+        init();
     }
 })();
