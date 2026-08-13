@@ -232,12 +232,12 @@
     function createToggleButton(onOpen) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.textContent = '🧩';
+        btn.textContent = '🧩 Batch Update';
         btn.title = 'Open Batch Attribute Updater';
         Object.assign(btn.style, {
-            position: 'fixed', top: '10px', right: '20px', width: '46px', height: '46px',
-            borderRadius: '50%', border: 'none', background: '#1890ff', color: '#fff',
-            fontSize: '20px', lineHeight: '46px', textAlign: 'center', padding: '0',
+            position: 'fixed', top: '70px', left: '20px', height: '38px', padding: '0 16px',
+            borderRadius: '19px', border: 'none', background: '#1890ff', color: '#fff',
+            fontSize: '13px', fontWeight: 'bold', fontFamily: 'Arial, Helvetica, sans-serif',
             cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 999999,
         });
         btn.addEventListener('click', onOpen);
@@ -248,7 +248,7 @@
     function createPanel(onClose) {
         const panel = document.createElement('div');
         Object.assign(panel.style, {
-            position: 'fixed', top: '10px', right: '20px', width: '320px', maxHeight: '80vh',
+            position: 'fixed', top: '70px', left: '20px', width: '320px', maxHeight: '80vh',
             display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #d9d9d9',
             borderRadius: '8px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)', zIndex: 999999,
             fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', overflow: 'hidden',
@@ -259,7 +259,6 @@
         if (savedPos) {
             panel.style.left = savedPos.left + 'px';
             panel.style.top = savedPos.top + 'px';
-            panel.style.right = 'auto';
         }
 
         const header = document.createElement('div');
