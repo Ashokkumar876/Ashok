@@ -368,10 +368,13 @@
                 referrer: location.href,
             });
 
-            if (res.c !== "0") {
+            // Observed response is a plain array of property entries — no {c, d} wrapper.
+            // Handle both shapes in case another environment/version does wrap it.
+            if (Array.isArray(res)) return res;
+            if (res && res.c !== undefined && res.c !== "0") {
                 throw new Error(`query API failed: ${res.m || 'unknown error'}`);
             }
-            return res;
+            return (res && Array.isArray(res.d)) ? res.d : [];
         }
 
         async function updateBizProperties(bodyData) {
@@ -408,8 +411,7 @@
                 return;
             }
 
-            const queryData = await queryBizProperties(obsBrandGoodId);
-            const existingBizProps = Array.isArray(queryData.d) ? queryData.d : [];
+            const existingBizProps = await queryBizProperties(obsBrandGoodId);
 
             if (operation === 'add') {
                 const mergedMap = new Map();
