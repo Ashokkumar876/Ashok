@@ -89,6 +89,20 @@
         #batchBizPropModal button.addKeyVal:hover {
             background: #40a9ff;
         }
+        #batchBizPropModal button.loadStaleKeys {
+            margin-bottom: 12px;
+            margin-left: 8px;
+            background: #fa8c16;
+            border: none;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #batchBizPropModal button.loadStaleKeys:hover {
+            background: #ffa940;
+        }
         #batchBizPropModal .btns {
             text-align: right;
             margin-top: 8px;
@@ -167,6 +181,7 @@
             <label>Select custom output property key-value pairs:</label>
             <div id="keyValuePairs"></div>
             <button class="addKeyVal" type="button">Add Key-Value Pair</button>
+            <button class="loadStaleKeys" type="button">Load the 12 stale keys (CMUP, TSUP, ...) for Delete</button>
 
             <label for="operationSelect">Operation:</label>
             <select id="operationSelect">
@@ -179,6 +194,8 @@
                 For each model, this queries its current custom output properties, finds any whose value fails validation
                 (e.g. VALUE_PARSE_ERROR), and deletes just those. Models with no errors are skipped and left untouched.
                 Key-value pairs above are ignored in this mode.
+                <br><b>Not usable yet</b> — the query endpoint this script calls doesn't return error/validation status,
+                so this mode currently reports every model as error-free. Use "Load the 12 stale keys" + Delete instead.
             </div>
 
             <div class="btns">
@@ -190,7 +207,14 @@
             <pre id="batchBizPropStatus"></pre>
         `;
 
-        function genKeyValRow(optionList) {
+        // Keys confirmed (via Network tab capture) to still be attached to individual
+        // products' custom output properties even though they were removed from the
+        // account-level property list — that's why they no longer appear as selectable
+        // options below, but still show up (and error) on the product's own "Edit
+        // attributes" panel.
+        const STALE_KEYS = ['CMUP', 'TSUP', 'BSUP', 'EBUP', 'CMGUP', 'TSGUP', 'BSGUP', 'EBGUP', 'CMGN', 'TSGN', 'BSGN', 'EBGN'];
+
+        function genKeyValRow(optionList, presetKey) {
             const row = document.createElement('div');
             row.classList.add('key-val-row');
 
@@ -203,12 +227,23 @@
             emptyOption.textContent = '-- Select Key --';
             selectKey.appendChild(emptyOption);
 
+            const knownKeys = new Set(optionList.map(o => o.propertyKey));
             optionList.forEach(({ propertyKey, propertyName }) => {
                 const op = document.createElement('option');
                 op.value = propertyKey;
                 op.textContent = `${propertyKey} (${propertyName})`;
                 selectKey.appendChild(op);
             });
+
+            // Preset keys that are no longer in the account-level list still need to be
+            // selectable so they can be targeted for deletion — add them as an extra option.
+            if (presetKey && !knownKeys.has(presetKey)) {
+                const op = document.createElement('option');
+                op.value = presetKey;
+                op.textContent = `${presetKey} (not in current property list)`;
+                selectKey.appendChild(op);
+            }
+            if (presetKey) selectKey.value = presetKey;
 
             const valInput = document.createElement('input');
             valInput.type = 'text';
@@ -244,6 +279,16 @@
             addKeyValBtn.style.display = isAutoDelete ? 'none' : '';
             autoDeleteHint.style.display = isAutoDelete ? '' : 'none';
         });
+
+        const loadStaleKeysBtn = modal.querySelector('.loadStaleKeys');
+        loadStaleKeysBtn.onclick = () => {
+            operationSelect.value = 'delete';
+            operationSelect.dispatchEvent(new Event('change'));
+            keyValueContainer.innerHTML = '';
+            STALE_KEYS.forEach(key => {
+                keyValueContainer.appendChild(genKeyValRow(propertyOptions, key));
+            });
+        };
 
         return modal;
     }
