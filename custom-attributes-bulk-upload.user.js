@@ -206,6 +206,27 @@
         return results;
     }
 
+    // ===== Position/minimized state persistence (so the panel stays put across page refreshes) =====
+    const POS_KEY = '__batchAttrPanelPos';
+    const MINIMIZED_KEY = '__batchAttrPanelMinimized';
+
+    function loadPosition() {
+        try {
+            const pos = JSON.parse(localStorage.getItem(POS_KEY));
+            if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') return pos;
+        } catch (e) { /* ignore malformed/missing state */ }
+        return null;
+    }
+    function savePosition(left, top) {
+        try { localStorage.setItem(POS_KEY, JSON.stringify({ left, top })); } catch (e) { /* storage unavailable */ }
+    }
+    function loadMinimized() {
+        return localStorage.getItem(MINIMIZED_KEY) === '1';
+    }
+    function saveMinimized(minimized) {
+        try { localStorage.setItem(MINIMIZED_KEY, minimized ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+    }
+
     // ===== UI =====
     function createPanel() {
         const panel = document.createElement('div');
@@ -216,17 +237,41 @@
             fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', overflow: 'hidden',
         });
 
+        // Restore last-dragged position so the panel doesn't jump back to the corner on every refresh.
+        const savedPos = loadPosition();
+        if (savedPos) {
+            panel.style.left = savedPos.left + 'px';
+            panel.style.top = savedPos.top + 'px';
+            panel.style.right = 'auto';
+        }
+
         const header = document.createElement('div');
         Object.assign(header.style, {
             background: '#1890ff', color: '#fff', padding: '8px 10px', display: 'flex',
-            alignItems: 'center', justifyContent: 'space-between', cursor: 'move', userSelect: 'none',
+            alignItems: 'center', justifyContent: 'space-between', userSelect: 'none',
         });
-        header.innerHTML = '<span style="font-weight:bold">🧩 Batch Attribute Updater</span>';
+
+        // Dedicated move handle — only this part starts a drag, so it doesn't fight with the buttons.
+        const moveHandle = document.createElement('span');
+        moveHandle.textContent = '⠿ Batch Attribute Updater';
+        moveHandle.title = 'Drag to move';
+        Object.assign(moveHandle.style, { fontWeight: 'bold', cursor: 'grab' });
+        header.appendChild(moveHandle);
+
+        const btnGroup = document.createElement('span');
+        Object.assign(btnGroup.style, { display: 'flex', gap: '10px', alignItems: 'center' });
+
+        const minimizeBtn = document.createElement('span');
+        minimizeBtn.style.cursor = 'pointer';
+        btnGroup.appendChild(minimizeBtn);
+
         const closeBtn = document.createElement('span');
         closeBtn.textContent = '✕';
         closeBtn.style.cursor = 'pointer';
         closeBtn.onclick = () => { panel.style.display = 'none'; };
-        header.appendChild(closeBtn);
+        btnGroup.appendChild(closeBtn);
+
+        header.appendChild(btnGroup);
         panel.appendChild(header);
 
         const body = document.createElement('div');
@@ -248,7 +293,16 @@
         `;
         panel.appendChild(body);
         document.body.appendChild(panel);
-        makeDraggable(panel, header);
+        makeDraggable(panel, moveHandle);
+
+        function setMinimized(minimized) {
+            body.style.display = minimized ? 'none' : '';
+            minimizeBtn.textContent = minimized ? '▢' : '－';
+            minimizeBtn.title = minimized ? 'Expand' : 'Minimize';
+            saveMinimized(minimized);
+        }
+        minimizeBtn.onclick = () => setMinimized(body.style.display !== 'none');
+        setMinimized(loadMinimized());
 
         let parsedJobs = [];
 
@@ -314,6 +368,7 @@
         let dragging = false, offsetX = 0, offsetY = 0;
         handle.addEventListener('mousedown', (e) => {
             dragging = true;
+            handle.style.cursor = 'grabbing';
             const rect = panel.getBoundingClientRect();
             offsetX = e.clientX - rect.left;
             offsetY = e.clientY - rect.top;
@@ -324,7 +379,12 @@
             panel.style.top = (e.clientY - offsetY) + 'px';
             panel.style.right = 'auto';
         });
-        document.addEventListener('mouseup', () => { dragging = false; });
+        document.addEventListener('mouseup', () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.style.cursor = 'grab';
+            savePosition(parseInt(panel.style.left, 10), parseInt(panel.style.top, 10));
+        });
     }
 
     if (document.readyState === 'loading') {
