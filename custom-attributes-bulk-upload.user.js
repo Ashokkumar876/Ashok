@@ -235,8 +235,8 @@
         btn.textContent = '🧩 Batch Update';
         btn.title = 'Open Batch Attribute Updater';
         Object.assign(btn.style, {
-            position: 'fixed', top: '70px', left: '20px', height: '38px', padding: '0 16px',
-            borderRadius: '19px', border: 'none', background: '#1890ff', color: '#fff',
+            position: 'fixed', top: '20px', left: '240px', height: '32px', padding: '0 16px',
+            borderRadius: '16px', border: 'none', background: '#1890ff', color: '#fff',
             fontSize: '13px', fontWeight: 'bold', fontFamily: 'Arial, Helvetica, sans-serif',
             cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 999999,
         });
@@ -248,7 +248,7 @@
     function createPanel(onClose) {
         const panel = document.createElement('div');
         Object.assign(panel.style, {
-            position: 'fixed', top: '70px', left: '20px', width: '320px', maxHeight: '80vh',
+            position: 'fixed', top: '58px', left: '240px', width: '320px', maxHeight: '80vh',
             display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #d9d9d9',
             borderRadius: '8px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)', zIndex: 999999,
             fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', overflow: 'hidden',
