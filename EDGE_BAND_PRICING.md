@@ -1,7 +1,10 @@
 # Edge Band Pricing Logic
 
-Source data: `data/parametric_master_sheet.csv` (753 material rows, 617 of
-which carry edge band pricing).
+Source data: your Parametric Master Sheet CSV (validated against a 753-row
+export, 617 of which carry edge band pricing). The sheet contains your
+vendor/cost data, so it is **not** committed to this repo — `data/` is
+gitignored. Drop your CSV at `data/parametric_master_sheet.csv` locally
+(or pass `--csv <path>`) before running the script.
 
 ## Rule, confirmed against the data
 
@@ -38,6 +41,10 @@ because the exceptions are already baked into which cells are populated:
   base thicknesses) only have `22_0p8` and `45_0p8` filled in, missing
   `22_2p0`/`30_0p8`/`30_2p0`/`45_2p0` — likely incomplete data entry worth
   reviewing in the source sheet.
+- One row (`LP003` / FWN-930, custom code `662p`) has `226` in the
+  `22_2p0` column where every comparable GREENLAM pattern-finish row has
+  `22.6` — almost certainly a missing decimal point. Worth fixing at the
+  source before this feeds a quote.
 
 ## Implementation
 
