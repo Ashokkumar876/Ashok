@@ -1,0 +1,618 @@
+product_name,custom_code,material_type,material_finish,eb_brand,panel_type,thickness_band_mm,edge_band_code,price_per_running_meter
+WPCNOSURF,Dummy Surface,Dummy Surface,NA,Rehau,Carcass,upto_18.5,22_0p8,6.0
+INL001A,HW/BK-WT/0.8MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,6.0
+INL001A,HW/BK-WT/0.8MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL001B,HW/BK-WT/1MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,6.0
+INL001B,HW/BK-WT/1MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL001C,HW/BK-WT/1.25MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,6.0
+INL001C,HW/BK-WT/1.25MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL002A,HW/BK-SM/0.8MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,12.0
+INL002A,HW/BK-SM/0.8MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL002B,HW/BK-SM/1MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,12.0
+INL002B,HW/BK-SM/1MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL002C,HW/BK-SM/1.25MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,12.0
+INL002C,HW/BK-SM/1.25MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL003A,HW/BK-CM/0.8MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,7.25
+INL003A,HW/BK-CM/0.8MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL003B,HW/BK-CM/1MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,7.25
+INL003B,HW/BK-CM/1MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+INL003C,HW/BK-CM/1.25MM,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,7.25
+INL003C,HW/BK-CM/1.25MM,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+AWG004,5331 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWG004,5331 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWG004,5331 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWG004,5331 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWG004,5331 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWG004,5331 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+AWB003,14664 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWB003,14664 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWB003,14664 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWB003,14664 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWB003,14664 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWB003,14664 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+AWB004,14650 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWB004,14650 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWB004,14650 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWB004,14650 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWB004,14650 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWB004,14650 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BEW002,5338 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BEW002,5338 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BEW002,5338 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BEW002,5338 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BEW002,5338 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BEW002,5338 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BEW003,5348 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BEW003,5348 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BEW003,5348 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BEW003,5348 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BEW003,5348 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BEW003,5348 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+AWG003,1269 CRY-Z,Laminate,Matt,ROYAL TOUCHE,Carcass,upto_18.5,23_1p3,28.48
+AWG003,1269 CRY-Z,Laminate,Matt,ROYAL TOUCHE,Shutter,upto_18.5,23_1p3,28.48
+AWG005,LG-1664,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWG005,LG-1664,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWG005,LG-1664,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWG005,LG-1664,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWG005,LG-1664,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWG005,LG-1664,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+AWB001,9202 ASW,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWB001,9202 ASW,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWB001,9202 ASW,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWB001,9202 ASW,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWB001,9202 ASW,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWB001,9202 ASW,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+AWB002,GR-351,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+AWB002,GR-351,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+AWB002,GR-351,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+AWB002,GR-351,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+AWB002,GR-351,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+AWB002,GR-351,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BRW001,GR-325,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BRW001,GR-325,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BRW001,GR-325,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BRW001,GR-325,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BRW001,GR-325,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BRW001,GR-325,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BRW003,GR-347,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BRW003,GR-347,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BRW003,GR-347,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BRW003,GR-347,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BRW003,GR-347,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BRW003,GR-347,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BEW001,SM-1731,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BEW001,SM-1731,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BEW001,SM-1731,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BEW001,SM-1731,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BEW001,SM-1731,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BEW001,SM-1731,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BEW004,CF-597,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+BEW004,CF-597,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+BEW004,CF-597,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+BEW004,CF-597,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+BEW004,CF-597,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+BEW004,CF-597,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+GOW001,TK-01,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+GOW001,TK-01,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+GOW001,TK-01,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+GOW001,TK-01,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+GOW001,TK-01,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+GOW001,TK-01,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+GOW002,TK-04,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+GOW002,TK-04,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+GOW002,TK-04,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+GOW002,TK-04,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+GOW002,TK-04,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+GOW002,TK-04,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+GOW003,TK-33,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+GOW003,TK-33,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+GOW003,TK-33,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+GOW003,TK-33,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+GOW003,TK-33,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+GOW003,TK-33,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+GOW004,PO-954,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+GOW004,PO-954,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+GOW004,PO-954,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+GOW004,PO-954,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+GOW004,PO-954,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+GOW004,PO-954,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+MW001,TK-29,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+MW001,TK-29,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+MW001,TK-29,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+MW001,TK-29,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+MW001,TK-29,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+MW001,TK-29,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+MW002,PO-964,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+MW002,PO-964,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+MW002,PO-964,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+MW002,PO-964,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+MW002,PO-964,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+MW002,PO-964,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WW001,TK-19,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WW001,TK-19,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WW001,TK-19,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WW001,TK-19,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WW001,TK-19,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WW001,TK-19,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WW002,TK-20,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WW002,TK-20,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WW002,TK-20,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WW002,TK-20,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WW002,TK-20,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WW002,TK-20,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WW003,TK-10,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WW003,TK-10,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WW003,TK-10,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WW003,TK-10,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WW003,TK-10,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WW003,TK-10,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WW005,FM-1727,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WW005,FM-1727,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WW005,FM-1727,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WW005,FM-1727,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WW005,FM-1727,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WW005,FM-1727,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WW006,TK-17,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WW006,TK-17,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WW006,TK-17,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WW006,TK-17,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WW006,TK-17,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WW006,TK-17,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BS002,CRY-1249 MT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GS002,9608 RS,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GS002,9608 RS,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GS002,9608 RS,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GS002,9608 RS,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GS002,9608 RS,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GS002,9608 RS,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FS001,MBS-106,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FS001,MBS-106,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FS001,MBS-106,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FS001,MBS-106,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FS001,MBS-106,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FS001,MBS-106,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FS002,MBS-107,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FS002,MBS-107,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FS002,MBS-107,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FS002,MBS-107,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FS002,MBS-107,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FS002,MBS-107,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FS003,MBS-108,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FS003,MBS-108,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FS003,MBS-108,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FS003,MBS-108,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FS003,MBS-108,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FS003,MBS-108,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FS004,MBS-103,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FS004,MBS-103,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FS004,MBS-103,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FS004,MBS-103,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FS004,MBS-103,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FS004,MBS-103,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+CS001,STN-204,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+CS001,STN-204,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+CS001,STN-204,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+CS001,STN-204,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+CS001,STN-204,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+CS001,STN-204,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+CS002,STN-217,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+CS002,STN-217,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+CS002,STN-217,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+CS002,STN-217,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+CS002,STN-217,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+CS002,STN-217,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+CS003,STN-226,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+CS003,STN-226,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+CS003,STN-226,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+CS003,STN-226,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+CS003,STN-226,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+CS003,STN-226,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+CS004,STN-219,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+CS004,STN-219,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+CS004,STN-219,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+CS004,STN-219,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+CS004,STN-219,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+CS004,STN-219,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BS001,5571 HDG,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BS001,5571 HDG,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+GS001,5572 HDG,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+GS001,5572 HDG,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+WS001,PU-425,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+WS001,PU-425,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+WS002,MBS-118,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+WS002,MBS-118,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BS003,9612 PU,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,32.03
+BS003,9612 PU,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,32.03
+LP001,21028 NL,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+LP001,21028 NL,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+LP001,21028 NL,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+LP001,21028 NL,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+LP001,21028 NL,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+LP001,21028 NL,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+LP002,21066 NL,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+LP002,21066 NL,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+LP002,21066 NL,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+LP002,21066 NL,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+LP002,21066 NL,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+LP002,21066 NL,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+LP003,FWN-930,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,12.73
+LP003,FWN-930,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,19.16
+LP003,FWN-930,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,41.34
+LP003,FWN-930,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,226.0
+LP003,FWN-930,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,30.95
+LP003,FWN-930,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,64.62
+LP004,FWN-948,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.19
+LP004,FWN-948,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,12.53
+LP004,FWN-948,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,27.03
+LP004,FWN-948,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,19.65
+LP004,FWN-948,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,24.57
+LP004,FWN-948,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,44.22
+FSP002,21091 VL,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FSP002,21091 VL,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FSP002,21091 VL,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FSP002,21091 VL,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FSP002,21091 VL,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FSP002,21091 VL,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FSP003,22099 VL,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FSP003,22099 VL,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FSP003,22099 VL,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FSP003,22099 VL,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FSP003,22099 VL,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FSP003,22099 VL,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+WP001,5377 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WP001,5377 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WP001,5377 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WP001,5377 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WP001,5377 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WP001,5377 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WP002,5378 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WP002,5378 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WP002,5378 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WP002,5378 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WP002,5378 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WP002,5378 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+FP002,CV-532,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+FP002,CV-532,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+FP002,CV-532,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+FP002,CV-532,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+FP002,CV-532,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+FP002,CV-532,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+FP005,GR-304,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+FP005,GR-304,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+FP005,GR-304,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+FP005,GR-304,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+FP005,GR-304,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+FP005,GR-304,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FSP001,CRY-1129 Z,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FSP004,STN-259,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FSP004,STN-259,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FSP004,STN-259,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FSP004,STN-259,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FSP004,STN-259,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FSP004,STN-259,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+FSP005,STN-257,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+FSP005,STN-257,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+FSP005,STN-257,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+FSP005,STN-257,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+FSP005,STN-257,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+FSP005,STN-257,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+WP003,HD-7040,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WP003,HD-7040,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WP003,HD-7040,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WP003,HD-7040,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WP003,HD-7040,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WP003,HD-7040,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WP004,HD-7041,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,13.45
+WP004,HD-7041,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,20.25
+WP004,HD-7041,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,43.68
+WP004,HD-7041,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,23.88
+WP004,HD-7041,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,32.7
+WP004,HD-7041,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,68.28
+WSM001,107 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+WSM001,107 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+WSM001,107 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+WSM001,107 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+WSM001,107 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+WSM001,107 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GSM001,271 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GSM001,271 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GSM001,271 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GSM001,271 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GSM001,271 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GSM001,271 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GSM002,22169,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GSM002,22169,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GSM002,22169,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GSM002,22169,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GSM002,22169,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GSM002,22169,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GSM003,21369,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GSM003,21369,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GSM003,21369,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GSM003,21369,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GSM003,21369,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GSM003,21369,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GSM004,266 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GSM004,266 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GSM004,266 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GSM004,266 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GSM004,266 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GSM004,266 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM001,272 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM001,272 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM001,272 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM001,272 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM001,272 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM001,272 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM002,1561 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM002,1561 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM002,1561 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM002,1561 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM002,1561 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM002,1561 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM003,1562 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM003,1562 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM003,1562 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM003,1562 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM003,1562 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM003,1562 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM004,297 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM004,297 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM004,297 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM004,297 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM004,297 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM004,297 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM005,1564 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM005,1564 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM005,1564 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM005,1564 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM005,1564 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM005,1564 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM006,22102,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM006,22102,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM006,22102,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM006,22102,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM006,22102,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM006,22102,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BLSM007,21022,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BLSM007,21022,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BLSM007,21022,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BLSM007,21022,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BLSM007,21022,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BLSM007,21022,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM002,1581 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GRSM002,1581 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GRSM002,1581 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GRSM002,1581 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GRSM002,1581 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GRSM002,1581 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM003,244 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GRSM003,244 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GRSM003,244 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GRSM003,244 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GRSM003,244 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GRSM003,244 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM004,245 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GRSM004,245 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GRSM004,245 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GRSM004,245 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GRSM004,245 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GRSM004,245 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM005,1565SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GRSM005,1565SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GRSM005,1565SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GRSM005,1565SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GRSM005,1565SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GRSM005,1565SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM006,1563 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+GRSM006,1563 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+GRSM006,1563 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+GRSM006,1563 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+GRSM006,1563 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+GRSM006,1563 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+VSM001,1553 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+VSM001,1553 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+VSM001,1553 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+VSM001,1553 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+VSM001,1553 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+VSM001,1553 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+RSM002,21155,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+RSM002,21155,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+RSM002,21155,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+RSM002,21155,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+RSM002,21155,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+RSM002,21155,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+RSM003,22084,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+RSM003,22084,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+RSM003,22084,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+RSM003,22084,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+RSM003,22084,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+RSM003,22084,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+RSM004,138 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+RSM004,138 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+RSM004,138 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+RSM004,138 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+RSM004,138 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+RSM004,138 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+RSM005,1552 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+RSM005,1552 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+RSM005,1552 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+RSM005,1552 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+RSM005,1552 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+RSM005,1552 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM001,21061,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM001,21061,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM001,21061,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM001,21061,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM001,21061,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM001,21061,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM002,21007,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM002,21007,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM002,21007,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM002,21007,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM002,21007,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM002,21007,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM003,132 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM003,132 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM003,132 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM003,132 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM003,132 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM003,132 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM004,22137 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM004,22137 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM004,22137 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM004,22137 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM004,22137 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM004,22137 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM005,1522 SD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM005,1522 SD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM005,1522 SD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM005,1522 SD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM005,1522 SD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM005,1522 SD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+BSM006,274 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+BSM006,274 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+BSM006,274 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+BSM006,274 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+BSM006,274 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+BSM006,274 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+YSM001,137 SAT,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+YSM001,137 SAT,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+YSM001,137 SAT,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+YSM001,137 SAT,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+YSM001,137 SAT,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+YSM001,137 SAT,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+YSM002,147 SUD,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+YSM002,147 SUD,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+YSM002,147 SUD,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+YSM002,147 SUD,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+YSM002,147 SUD,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+YSM002,147 SUD,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+GRSM001,CRY-1174 MT,Laminate,Matt,Rehau,Carcass,upto_18.5,23_1p3,28.48
+GRSM001,CRY-1174 MT,Laminate,Matt,Rehau,Shutter,upto_18.5,23_1p3,28.48
+RSM001,SM-129,Laminate,Matt,Rehau,Carcass,upto_18.5,22_0p8,9.71
+RSM001,SM-129,Laminate,Matt,Rehau,Carcass,18.5_to_26.5,30_0p8,13.24
+RSM001,SM-129,Laminate,Matt,Rehau,Carcass,26.5_to_41.5,45_0p8,28.56
+RSM001,SM-129,Laminate,Matt,Rehau,Shutter,upto_18.5,22_2p0,20.76
+RSM001,SM-129,Laminate,Matt,Rehau,Shutter,18.5_to_26.5,30_2p0,25.96
+RSM001,SM-129,Laminate,Matt,Rehau,Shutter,26.5_to_41.5,45_2p0,46.73
+WSG001,107 SHGL,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+WSG001,107 SHGL,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+GSG001,21069 MR+,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+GSG001,21069 MR+,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BLSG001,22122 HGL,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BLSG001,22122 HGL,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BLSG002,22102 MR+,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BLSG002,22102 MR+,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BLSG003,21022 MR+,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BLSG003,21022 MR+,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+RSG001,138 HDG,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+RSG001,138 HDG,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BSG001,21037 MR+,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BSG001,21037 MR+,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BSG002,22137,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BSG002,22137,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BSG003,21127,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BSG003,21127,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+BSG004,22119,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+BSG004,22119,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+YSG001,22017,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,28.54
+YSG001,22017,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,28.54
+VSG001,1541 PU,Laminate,Glossy,Rehau,Carcass,upto_18.5,23_1p3,27.01
+VSG001,1541 PU,Laminate,Glossy,Rehau,Shutter,upto_18.5,23_1p3,27.01
+US001,US001,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US001,US001,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US002,US002,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US002,US002,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US003,US003,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US003,US003,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US004,US004,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US004,US004,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US005,US005,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US005,US005,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US006,US006,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US006,US006,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+US007,US007,Acrylic,NA,Sewon,Carcass,upto_18.5,23_1p3,40.0
+US007,US007,Acrylic,NA,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UM004,UM004,Acrylic,Matt,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UM004,UM004,Acrylic,Matt,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UM006,UM006,Acrylic,Matt,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UM006,UM006,Acrylic,Matt,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UM008,UM008,Acrylic,Matt,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UM008,UM008,Acrylic,Matt,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UM010,UM010,Acrylic,Matt,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UM010,UM010,Acrylic,Matt,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UG002,UG002,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UG002,UG002,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UG005,UG005,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UG005,UG005,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UG008,UG008,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UG008,UG008,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UG009,UG009,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UG009,UG009,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UGMT001,UGMT001,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UGMT001,UGMT001,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UGMT002,UGMT002,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UGMT002,UGMT002,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+UGMT003,UGMT003,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+UGMT003,UGMT003,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+ES91613,ES91613,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+ES91613,ES91613,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+ES91615,ES91615,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+ES91615,ES91615,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+ES91630E,ES91630E,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+ES91630E,ES91630E,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+ES91629E,ES91629E,Acrylic,Glossy,Sewon,Carcass,upto_18.5,23_1p3,40.0
+ES91629E,ES91629E,Acrylic,Glossy,Sewon,Shutter,upto_18.5,23_1p3,40.0
+ES91625E,ES91625E,Acrylic,Glossy,Sidmark,Carcass,upto_18.5,23_1p3,96.0
+ES91625E,ES91625E,Acrylic,Glossy,Sidmark,Shutter,upto_18.5,23_1p3,96.0
+ES91635,ES91635,Acrylic,Glossy,Rehau,Carcass,upto_18.5,23_1p3,27.0
+ES91635,ES91635,Acrylic,Glossy,Rehau,Shutter,upto_18.5,23_1p3,27.0
+ES91637,ES91637,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,27.0
+ES91637,ES91637,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,27.0
+ES91627,ES91627,Acrylic,Glossy,Rehau,Carcass,upto_18.5,23_1p3,96.0
+ES91627,ES91627,Acrylic,Glossy,Rehau,Shutter,upto_18.5,23_1p3,96.0
+ES91626,ES91626,Acrylic,Glossy,,Carcass,upto_18.5,23_1p3,23.0
+ES91626,ES91626,Acrylic,Glossy,,Shutter,upto_18.5,23_1p3,23.0
+65689,65689,Acrylic,Matt,PRINTECH KR,Carcass,upto_18.5,22_1p0,25.0
+65689,65689,Acrylic,Matt,PRINTECH KR,Shutter,upto_18.5,22_1p0,25.0
+66690,66690,Acrylic,Matt,PRINTECH KR,Carcass,upto_18.5,22_1p0,25.0
+66690,66690,Acrylic,Matt,PRINTECH KR,Shutter,upto_18.5,22_1p0,25.0
+67691,67691,Acrylic,Matt,PRINTECH KR,Carcass,upto_18.5,22_1p0,25.0
+67691,67691,Acrylic,Matt,PRINTECH KR,Shutter,upto_18.5,22_1p0,25.0
+67692,67692,Acrylic,Matt,PRINTECH KR,Carcass,upto_18.5,22_1p0,25.0
+67692,67692,Acrylic,Matt,PRINTECH KR,Shutter,upto_18.5,22_1p0,25.0
+NY1103G,NY1103G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1103G,NY1103G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1106G,NY1106G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1106G,NY1106G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1110G,NY1110G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1110G,NY1110G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1113G,NY1113G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1113G,NY1113G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1115G,NY1115G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1115G,NY1115G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1124G,NY1124G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1124G,NY1124G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1156G,NY1156G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1156G,NY1156G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1163G,NY1163G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1163G,NY1163G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1167G,NY1167G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1167G,NY1167G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1169G,NY1169G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1169G,NY1169G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1176G,NY1176G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1176G,NY1176G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
+NY1181G,NY1181G,Acrylic,Glossy,Ningyi,Carcass,upto_18.5,23_1p3,23.0
+NY1181G,NY1181G,Acrylic,Glossy,Ningyi,Shutter,upto_18.5,23_1p3,23.0
