@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Homworks Studio - Auto Batch Update Parts
 // @namespace    homworksstudio-auto-batch-update
-// @version      1.1
+// @version      1.2
 // @description  Repeatedly clicks "Select All" then "Update Part" on the CPM model batch-update list page until every remaining item has been updated.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @match        https://homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
@@ -64,29 +64,51 @@
   }
 
   function parseSelectedCounts() {
-    const match = document.body.innerText.match(/Selected\s+(\d+)\s*\/\s*(\d+)/i);
+    // Actual markup: <div class="select-all-checkbox">...<div class="selected-num">Selected 9/100</div></div>
+    const countEl = document.querySelector('.select-all-checkbox .selected-num');
+    const text = countEl ? countEl.textContent : document.body.innerText;
+    const match = text.match(/Selected\s+(\d+)\s*\/\s*(\d+)/i);
     if (!match) return null;
     return { selected: parseInt(match[1], 10), total: parseInt(match[2], 10) };
   }
 
   function findSelectAllCheckbox() {
+    // Actual markup: <div class="select-all-checkbox"><label class="tui-control tui-checkbox">
+    //   <input type="checkbox"><span class="tui-control-indicator"></span>Select All</label>...</div>
+    const checkbox = document.querySelector('.select-all-checkbox input[type="checkbox"]');
+    if (checkbox) return checkbox;
+    // Fallback in case the page markup changes.
     const label = findClickableByExactText('Select All');
     if (label) {
       const container = label.closest('div, label, span') || label.parentElement;
-      const checkbox =
+      const fallbackCheckbox =
         container?.querySelector('input[type="checkbox"]') ||
         container?.parentElement?.querySelector('input[type="checkbox"]');
-      if (checkbox) return checkbox;
+      if (fallbackCheckbox) return fallbackCheckbox;
     }
     return document.querySelector('input[type="checkbox"]');
   }
 
+  function isSelectAllChecked(checkbox) {
+    if (checkbox.checked) return true;
+    // The tui-checkbox component also toggles a class on the wrapping <label>.
+    const label = checkbox.closest('label');
+    return !!label && label.classList.contains('tui-checked');
+  }
+
   function findUpdatePartButton() {
+    // Actual markup: <button class="tui-btn tui-btn--primary ...">Update Part</button>
+    const primaryButtons = Array.from(document.querySelectorAll('button.tui-btn--primary'));
+    const byClass = primaryButtons.find((btn) => btn.textContent.trim() === 'Update Part');
+    if (byClass) return byClass;
     const el = findClickableByExactText('Update Part');
     return el ? getClickTarget(el) : null;
   }
 
   function findRefreshListButton() {
+    // Actual markup: <div class="refresh-button"><button class="tui-btn tui-btn--secondary ...">Refresh List</button></div>
+    const byClass = document.querySelector('.refresh-button button');
+    if (byClass) return byClass;
     const el = findClickableByExactText('Refresh List');
     return el ? getClickTarget(el) : null;
   }
@@ -108,7 +130,7 @@
       log('Could not find the "Select All" checkbox.');
       return false;
     }
-    if (!checkbox.checked) {
+    if (!isSelectAllChecked(checkbox)) {
       checkbox.click();
       log('Clicked "Select All".');
       await sleep(300);
