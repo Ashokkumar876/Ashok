@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Homworks Studio - Auto Batch Update Parts
 // @namespace    homworksstudio-auto-batch-update
-// @version      3.1
+// @version      3.2
 // @description  Click once to automatically repeat Select All + Update Part on the CPM model batch-update list page until every remaining item has been updated. Tracks the real remaining-item count via the "oldversion" API (the on-screen "Selected X/Y" text is a fixed library size, not a progress count) and moves to the next batch as soon as the backend finishes.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @match        https://homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
@@ -31,6 +31,18 @@
   let running = false;
   let consecutiveFailures = 0;
   let controlButton = null;
+  let loopStartTime = null;
+  let initialRemainingCount = null;
+
+  function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
 
   function log(...args) {
     console.log('[AutoBatchUpdate]', ...args);
@@ -230,10 +242,23 @@
       handleFailure(`Failed to check remaining count: ${err.message}`, libraryId);
       return;
     }
-    log(`Remaining items to update: ${before}`);
+
+    if (initialRemainingCount === null) initialRemainingCount = before;
+    const itemsDone = initialRemainingCount - before;
+    const elapsedMs = Date.now() - loopStartTime;
+    let etaSuffix = '';
+    let etaLog = '';
+    if (itemsDone > 0) {
+      const msPerItem = elapsedMs / itemsDone;
+      const estRemainingMs = msPerItem * before;
+      etaSuffix = ` (${before} left, ~${formatDuration(estRemainingMs)})`;
+      etaLog = ` | elapsed ${formatDuration(elapsedMs)} | avg ${formatDuration(msPerItem)}/item | est. ${formatDuration(estRemainingMs)} left`;
+    }
+    log(`Remaining items to update: ${before}${etaLog}`);
+    if (controlButton) controlButton.textContent = `Stop Auto Update${etaSuffix}`;
 
     if (before === 0) {
-      finish('All parts have been updated (0 remaining).');
+      finish(`All parts have been updated (0 remaining). Total time: ${formatDuration(elapsedMs)}.`);
       return;
     }
 
@@ -294,7 +319,7 @@
   function updateButtonUi() {
     if (!controlButton) return;
     if (running) {
-      controlButton.textContent = 'Stop Auto Update';
+      // Text is kept live with an ETA suffix inside runCycle(); just set the color here.
       controlButton.style.background = '#dc2626';
     } else {
       controlButton.textContent = 'Start Auto Update (runs until 0)';
@@ -332,6 +357,9 @@
         }
         running = true;
         consecutiveFailures = 0;
+        loopStartTime = Date.now();
+        initialRemainingCount = null;
+        btn.textContent = 'Stop Auto Update (checking...)';
         updateButtonUi();
         log('Starting auto update loop...');
         runCycle(libraryId);
