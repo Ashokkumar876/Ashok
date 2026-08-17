@@ -112,14 +112,15 @@
                     setAttrs.push({ attributeId: col.attributeId, attributeValue: val });
                 }
             });
-            if (setAttrs.length > 0 || deleteAttrIds.length > 0) {
-                jobs.push({ productId, materialName, setAttrs, deleteAttrIds });
-            }
+            // Always create a job once a productId is present, even with no attribute
+            // columns — a CSV of just ProductID (+ MaterialName) is enough to run
+            // orphaned-attribute cleanup below.
+            jobs.push({ productId, materialName, setAttrs, deleteAttrIds });
         }
         return { jobs, warnings };
     }
 
-    async function runJobs(jobs, onProgress) {
+    async function runJobs(jobs, onProgress, cleanupOrphaned) {
         const results = [];
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
@@ -191,10 +192,52 @@
                 }
             }
 
+            // --- Handle orphaned attribute cleanup: attributes still attached to this
+            // product whose definition was removed from the system, so their name and
+            // quoteName both come back empty. They can't be targeted by column name
+            // anymore, so this looks them up directly by that empty-name signature. ---
+            let orphanedCount = 0;
+            if (cleanupOrphaned) {
+                try {
+                    const listRes = await fetch(getListUrl(job.productId), { credentials: 'include' });
+                    const listData = await listRes.json().catch(() => null);
+                    const current = (listData && listData.d && listData.d.result) || [];
+                    const orphaned = current.filter(a => !a.attributeName && !a.quoteName);
+                    if (orphaned.length > 0) {
+                        const delRes = await fetch(SAVE_URL, {
+                            method: 'DELETE',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ obsBgIds: [job.productId], attributes: orphaned }),
+                        });
+                        if (!delRes.ok) {
+                            overallOk = false;
+                            notes.push(`orphan cleanup failed: HTTP ${delRes.status}`);
+                        } else {
+                            const delData = await delRes.json().catch(() => null);
+                            if (delData && delData.success === false) {
+                                overallOk = false;
+                                notes.push(`orphan cleanup failed: ${delData.message || JSON.stringify(delData)}`);
+                            } else {
+                                orphanedCount = orphaned.length;
+                                notes.push(`removed ${orphaned.length} orphaned attribute(s) (attributeId ${orphaned.map(a => a.attributeId).join(', ')})`);
+                            }
+                        }
+                    } else {
+                        notes.push('no orphaned attributes found');
+                    }
+                } catch (e) {
+                    overallOk = false;
+                    notes.push(`orphan cleanup failed: ${e}`);
+                }
+            }
+
+            if (notes.length === 0) notes.push('no changes');
+
             results.push({
                 productId: job.productId,
                 materialName: job.materialName,
-                attrCount: job.setAttrs.length + job.deleteAttrIds.length,
+                attrCount: job.setAttrs.length + job.deleteAttrIds.length + orphanedCount,
                 status: overallOk ? 'OK' : 'FAILED',
                 message: notes.join('; '),
             });
@@ -294,6 +337,12 @@
                 • Type <b>DELETE</b> in the cell to remove that attribute from that product entirely.
             </div>
             <input type="file" id="__batchAttrFile" accept=".csv" style="margin-bottom:8px; width:100%;" />
+            <label style="display:flex; align-items:flex-start; gap:6px; margin-bottom:8px; color:#666; line-height:1.4;">
+                <input type="checkbox" id="__batchAttrCleanupOrphaned" style="margin-top:2px;" />
+                <span>Also delete <b>orphaned attributes</b> (attribute still attached to the product, but its
+                name/quoteName is empty because it was removed from the system). CSV only needs
+                <b>ProductID</b> (+ optional MaterialName) for this — attribute columns aren't required.</span>
+            </label>
             <div id="__batchAttrSummary" style="color:#888; margin-bottom:8px;"></div>
             <button id="__batchAttrRun" disabled style="width:100%; padding:8px; background:#52c41a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">▶ Run Batch Update</button>
             <div id="__batchAttrLog" style="margin-top:10px; font-size:12px; max-height:280px; overflow-y:auto;"></div>
@@ -305,6 +354,7 @@
         let parsedJobs = [];
 
         const fileInput = body.querySelector('#__batchAttrFile');
+        const cleanupOrphanedCheckbox = body.querySelector('#__batchAttrCleanupOrphaned');
         const summary = body.querySelector('#__batchAttrSummary');
         const runBtn = body.querySelector('#__batchAttrRun');
         const log = body.querySelector('#__batchAttrLog');
@@ -342,7 +392,7 @@
                 line.textContent = `${last.status === 'OK' ? '✓' : '✗'} ${label} (${last.attrCount} attr) ${last.message || ''}`;
                 log.appendChild(line);
                 log.scrollTop = log.scrollHeight;
-            });
+            }, cleanupOrphanedCheckbox.checked);
             const okCount = results.filter(r => r.status === 'OK').length;
             runBtn.textContent = `▶ Run Batch Update`;
             runBtn.disabled = false;
