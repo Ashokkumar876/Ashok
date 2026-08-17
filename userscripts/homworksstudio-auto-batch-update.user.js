@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Homworks Studio - Auto Batch Update Parts
 // @namespace    homworksstudio-auto-batch-update
-// @version      1.2
-// @description  Repeatedly clicks "Select All" then "Update Part" on the CPM model batch-update list page until every remaining item has been updated.
+// @version      2.0
+// @description  Updates all remaining items on the CPM model batch-update list page. Adds a fast "One-Shot Update All" (direct API calls) and a fallback "Auto Update (Click Loop)" that simulates Select All + Update Part clicks.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @match        https://homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @run-at       document-idle
@@ -17,9 +17,23 @@
   const ELEMENT_WAIT_TIMEOUT_MS = 20000;
   const MAX_CONSECUTIVE_FAILURES = 3;
 
+  // --- One-shot (direct API) settings ---
+  // toolType matches the currently selected tab: "cabinet" = Kitchen & Bath.
+  // If you run this on Custom Furniture / Doors & Windows, check the Network tab
+  // for the toolType value used by that tab's "oldversion" request and update this.
+  const TOOL_TYPE = 'cabinet';
+  // Captured from a real "Update Part" click — this project seems to log a fixed
+  // operator id rather than the logged-in user's id. Verify against a fresh
+  // network capture if operation/record calls start failing.
+  const OPERATOR_ID = 19;
+  const ONE_SHOT_BATCH_SIZE = 30;   // items per API batch
+  const ONE_SHOT_BATCH_DELAY_MS = 600;
+
   let running = false;
   let consecutiveFailures = 0;
   let controlButton = null;
+  let oneShotButton = null;
+  let oneShotRunning = false;
 
   function log(...args) {
     console.log('[AutoBatchUpdate]', ...args);
@@ -237,13 +251,188 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // One-shot mode: call the underlying APIs directly instead of clicking
+  // through the UI in batches of ~9 with multi-second waits.
+  // ---------------------------------------------------------------------
+
+  function getLibraryIdFromUrl() {
+    return new URLSearchParams(window.location.search).get('extendlibraryid');
+  }
+
+  function chunkArray(arr, size) {
+    const chunks = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  async function fetchOldVersionPage(libraryId, page) {
+    const url = `/editor/api/site/model/oldversion?toolType=${encodeURIComponent(TOOL_TYPE)}&page=${page}&libraryId=${encodeURIComponent(libraryId)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        accept: '*/*',
+        'editor-locale': 'en_IN',
+        'x-qh-locale': 'en_IN',
+        'x-qh-site': 'coohom',
+      },
+    });
+    if (!res.ok) throw new Error(`oldversion request failed: ${res.status}`);
+    return res.json();
+  }
+
+  async function collectAllRemainingIds(libraryId) {
+    const ids = [];
+    const seen = new Set();
+    let page = 0;
+    let totalPage = 1;
+    do {
+      const data = await fetchOldVersionPage(libraryId, page);
+      const items = Array.isArray(data.result) ? data.result : [];
+      for (const item of items) {
+        if (item.obsBrandGoodId && !seen.has(item.obsBrandGoodId)) {
+          seen.add(item.obsBrandGoodId);
+          ids.push(item.obsBrandGoodId);
+        }
+      }
+      totalPage = typeof data.totalPage === 'number' && data.totalPage > 0 ? data.totalPage : 1;
+      page += 1;
+    } while (page < totalPage);
+    return ids;
+  }
+
+  async function submitModelInstanceBatch(ids) {
+    const res = await fetch('/editortask/editordata/modelinstance', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        accept: '*/*',
+        'content-type': 'application/json;charset=UTF-8',
+        'editor-locale': 'en_IN',
+        'x-qh-locale': 'en_IN',
+        'x-qh-site': 'coohom',
+      },
+      body: JSON.stringify({ obsBrandGoodIds: ids }),
+    });
+    if (!res.ok) throw new Error(`modelinstance request failed: ${res.status}`);
+  }
+
+  async function submitOperationRecordBatch(ids) {
+    const now = Date.now();
+    const payload = ids.map((obsBrandGoodId) => ({
+      obsBrandGoodId,
+      operatorId: OPERATOR_ID,
+      timestamp: now,
+      content: 'Update Part',
+    }));
+    const res = await fetch('/editor/api/site/brandgood/operation/record', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        accept: '*/*',
+        'content-type': 'application/json',
+        'editor-locale': 'en_IN',
+        'x-qh-locale': 'en_IN',
+        'x-qh-site': 'coohom',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`operation/record request failed: ${res.status}`);
+  }
+
+  function updateOneShotButtonUi(text, background) {
+    if (!oneShotButton) return;
+    oneShotButton.textContent = text;
+    oneShotButton.style.background = background;
+  }
+
+  async function runOneShotUpdate() {
+    if (oneShotRunning) return;
+    oneShotRunning = true;
+    updateOneShotButtonUi('Updating...', '#6b7280');
+
+    try {
+      const libraryId = getLibraryIdFromUrl();
+      if (!libraryId) {
+        throw new Error('Could not find "extendlibraryid" in the page URL.');
+      }
+
+      log('One-shot: fetching full list of items needing update...');
+      const allIds = await collectAllRemainingIds(libraryId);
+      log(`One-shot: found ${allIds.length} item(s) to update.`);
+
+      if (allIds.length === 0) {
+        alert('One-Shot Update: nothing to update — list is already empty.');
+        return;
+      }
+
+      const batches = chunkArray(allIds, ONE_SHOT_BATCH_SIZE);
+      let done = 0;
+      for (const batch of batches) {
+        await submitModelInstanceBatch(batch);
+        await submitOperationRecordBatch(batch);
+        done += batch.length;
+        log(`One-shot: updated ${done}/${allIds.length}`);
+        updateOneShotButtonUi(`Updating ${done}/${allIds.length}...`, '#6b7280');
+        await sleep(ONE_SHOT_BATCH_DELAY_MS);
+      }
+
+      // Verify.
+      const remaining = await collectAllRemainingIds(libraryId);
+      await clickRefreshListIfPresent();
+
+      if (remaining.length === 0) {
+        alert(`One-Shot Update finished: updated ${allIds.length} item(s).`);
+      } else {
+        alert(
+          `One-Shot Update: submitted ${allIds.length} item(s), but ${remaining.length} still show as remaining. ` +
+            'Click "One-Shot Update All" again to retry those.'
+        );
+      }
+    } catch (err) {
+      log('One-shot update failed:', err);
+      alert(`One-Shot Update failed: ${err.message}\nCheck the console for details.`);
+    } finally {
+      oneShotRunning = false;
+      updateOneShotButtonUi('One-Shot Update All', '#059669');
+    }
+  }
+
+  function addOneShotButton() {
+    if (document.getElementById('one-shot-update-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'one-shot-update-btn';
+    btn.textContent = 'One-Shot Update All';
+    Object.assign(btn.style, {
+      position: 'fixed',
+      top: '54px',
+      right: '10px',
+      zIndex: 999999,
+      padding: '10px 16px',
+      background: '#059669',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontFamily: 'sans-serif',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+    });
+    btn.addEventListener('click', runOneShotUpdate);
+    document.body.appendChild(btn);
+    oneShotButton = btn;
+  }
+
   function updateButtonUi() {
     if (!controlButton) return;
     if (running) {
       controlButton.textContent = 'Stop Auto Update';
       controlButton.style.background = '#dc2626';
     } else {
-      controlButton.textContent = 'Start Auto Update';
+      controlButton.textContent = 'Auto Update (Click Loop)';
       controlButton.style.background = '#2563eb';
     }
   }
@@ -252,7 +441,7 @@
     if (document.getElementById('auto-batch-update-btn')) return;
     const btn = document.createElement('button');
     btn.id = 'auto-batch-update-btn';
-    btn.textContent = 'Start Auto Update';
+    btn.textContent = 'Auto Update (Click Loop)';
     Object.assign(btn.style, {
       position: 'fixed',
       top: '10px',
@@ -288,6 +477,9 @@
   }
 
   window.addEventListener('load', () => {
-    setTimeout(addControlButton, 1000);
+    setTimeout(() => {
+      addControlButton();
+      addOneShotButton();
+    }, 1000);
   });
 })();
