@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Homworks Studio - Auto Batch Update Parts
 // @namespace    homworksstudio-auto-batch-update
-// @version      2.1
-// @description  Click once to automatically repeat Select All + Update Part on the CPM model batch-update list page until every remaining item has been updated (count reaches 0).
+// @version      3.0
+// @description  Click once to automatically repeat Select All + Update Part on the CPM model batch-update list page until every remaining item has been updated (count reaches 0). Polls for real completion instead of using fixed delays, so it moves to the next batch as soon as the backend finishes.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @match        https://homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @run-at       document-idle
@@ -19,10 +19,14 @@
   // network calls alone only fetch data and write an audit-log entry, so items
   // never leave the "remaining" list. Real clicks are required, so this script
   // automates the real clicks in a loop instead.
-  const AFTER_UPDATE_DELAY_MS = 3500;   // give the "Update Part" request time to finish before checking state again
   const POLL_INTERVAL_MS = 400;
   const ELEMENT_WAIT_TIMEOUT_MS = 20000;
   const MAX_CONSECUTIVE_FAILURES = 3;
+  // After clicking "Update Part" the site does real server-side rendering per item,
+  // which can take a while. Instead of a fixed guessed delay, poll the count and
+  // move on the instant it actually changes — this is as fast as the backend allows.
+  const PROCESSING_POLL_INTERVAL_MS = 2500;
+  const MAX_BATCH_WAIT_MS = 8 * 60 * 1000; // safety cap per batch (8 min)
 
   let running = false;
   let consecutiveFailures = 0;
@@ -176,6 +180,22 @@
     return counts.total === 0;
   }
 
+  // Polls the count (refreshing the list each time) until it actually drops below
+  // `totalBefore`, or until MAX_BATCH_WAIT_MS elapses. Returns the latest counts.
+  async function waitForBatchToFinish(totalBefore) {
+    const start = Date.now();
+    while (Date.now() - start < MAX_BATCH_WAIT_MS) {
+      if (!running) return parseSelectedCounts();
+      await sleep(PROCESSING_POLL_INTERVAL_MS);
+      await clickRefreshListIfPresent();
+      const counts = parseSelectedCounts();
+      if (counts && counts.total !== totalBefore) {
+        return counts;
+      }
+    }
+    return parseSelectedCounts();
+  }
+
   async function runCycle() {
     if (!running) return;
 
@@ -206,13 +226,16 @@
     }
 
     consecutiveFailures = 0;
-    await sleep(AFTER_UPDATE_DELAY_MS);
-    await clickRefreshListIfPresent();
-    await sleep(800);
+    log('Clicked. Waiting for the site to finish processing this batch (real server-side rendering — moving on the instant it completes)...');
+    const after = await waitForBatchToFinish(before ? before.total : -1);
 
-    const after = parseSelectedCounts();
     if (isFinished(after)) {
       finish('All parts have been updated (remaining total reached 0).');
+      return;
+    }
+
+    if (before && after && after.total === before.total) {
+      handleFailure(`No progress after waiting ${Math.round(MAX_BATCH_WAIT_MS / 60000)} min on this batch — it may still be processing.`);
       return;
     }
 
