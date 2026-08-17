@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Homworks Studio - Auto Batch Update Parts
 // @namespace    homworksstudio-auto-batch-update
-// @version      3.0
-// @description  Click once to automatically repeat Select All + Update Part on the CPM model batch-update list page until every remaining item has been updated (count reaches 0). Polls for real completion instead of using fixed delays, so it moves to the next batch as soon as the backend finishes.
+// @version      3.1
+// @description  Click once to automatically repeat Select All + Update Part on the CPM model batch-update list page until every remaining item has been updated. Tracks the real remaining-item count via the "oldversion" API (the on-screen "Selected X/Y" text is a fixed library size, not a progress count) and moves to the next batch as soon as the backend finishes.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @match        https://homworksstudio.com/pub/tool/cpm/modelbatchudpate/list*
 // @run-at       document-idle
@@ -74,13 +74,42 @@
     return clickableAncestor || el;
   }
 
-  function parseSelectedCounts() {
-    // Actual markup: <div class="select-all-checkbox">...<div class="selected-num">Selected 9/100</div></div>
-    const countEl = document.querySelector('.select-all-checkbox .selected-num');
-    const text = countEl ? countEl.textContent : document.body.innerText;
-    const match = text.match(/Selected\s+(\d+)\s*\/\s*(\d+)/i);
-    if (!match) return null;
-    return { selected: parseInt(match[1], 10), total: parseInt(match[2], 10) };
+  // NOTE: the on-screen "Selected X/Y" text is X = currently checked items,
+  // Y = the FIXED total size of the whole library (it never goes to 0). It is
+  // NOT the "items still needing update" count, and must not be used to detect
+  // progress or completion — that was the bug in an earlier version of this
+  // script, which caused it to wait the full timeout every cycle for a number
+  // that could never change. The real remaining count comes from the same
+  // read-only "oldversion" API the page itself calls for "Refresh List".
+
+  // toolType matches the currently selected tab: "cabinet" = Kitchen & Bath.
+  // If you run this on Custom Furniture / Doors & Windows, check the Network tab
+  // for the toolType value used by that tab's "oldversion" request and update this.
+  const TOOL_TYPE = 'cabinet';
+
+  function getLibraryIdFromUrl() {
+    return new URLSearchParams(window.location.search).get('extendlibraryid');
+  }
+
+  // Read-only status check — mirrors what "Refresh List" fetches, does not
+  // perform any update itself.
+  async function fetchRemainingCount(libraryId) {
+    const url = `/editor/api/site/model/oldversion?toolType=${encodeURIComponent(TOOL_TYPE)}&page=0&libraryId=${encodeURIComponent(libraryId)}`;
+    const res = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        accept: '*/*',
+        'editor-locale': 'en_IN',
+        'x-qh-locale': 'en_IN',
+        'x-qh-site': 'coohom',
+      },
+    });
+    if (!res.ok) throw new Error(`oldversion request failed: ${res.status}`);
+    const data = await res.json();
+    if (typeof data.totalCount === 'number') return data.totalCount;
+    if (typeof data.count === 'number') return data.count;
+    return Array.isArray(data.result) ? data.result.length : null;
   }
 
   function findSelectAllCheckbox() {
@@ -175,83 +204,78 @@
     }
   }
 
-  function isFinished(counts) {
-    if (!counts) return false;
-    return counts.total === 0;
-  }
-
-  // Polls the count (refreshing the list each time) until it actually drops below
-  // `totalBefore`, or until MAX_BATCH_WAIT_MS elapses. Returns the latest counts.
-  async function waitForBatchToFinish(totalBefore) {
+  // Polls the real remaining count until it actually drops below `countBefore`,
+  // reaches 0, or MAX_BATCH_WAIT_MS elapses.
+  async function waitForBatchToFinish(libraryId, countBefore) {
     const start = Date.now();
     while (Date.now() - start < MAX_BATCH_WAIT_MS) {
-      if (!running) return parseSelectedCounts();
+      if (!running) return fetchRemainingCount(libraryId);
       await sleep(PROCESSING_POLL_INTERVAL_MS);
       await clickRefreshListIfPresent();
-      const counts = parseSelectedCounts();
-      if (counts && counts.total !== totalBefore) {
-        return counts;
+      const count = await fetchRemainingCount(libraryId);
+      if (count === 0 || count !== countBefore) {
+        return count;
       }
     }
-    return parseSelectedCounts();
+    return fetchRemainingCount(libraryId);
   }
 
-  async function runCycle() {
+  async function runCycle(libraryId) {
     if (!running) return;
 
-    const before = parseSelectedCounts();
-    if (before) log(`Status before cycle: Selected ${before.selected}/${before.total}`);
+    let before;
+    try {
+      before = await fetchRemainingCount(libraryId);
+    } catch (err) {
+      handleFailure(`Failed to check remaining count: ${err.message}`, libraryId);
+      return;
+    }
+    log(`Remaining items to update: ${before}`);
 
-    if (isFinished(before)) {
-      finish('All parts have been updated (remaining total reached 0).');
+    if (before === 0) {
+      finish('All parts have been updated (0 remaining).');
       return;
     }
 
     const selectedOk = await ensureSelectAll();
     if (!selectedOk) {
-      handleFailure('Failed to select all items.');
+      handleFailure('Failed to select all items.', libraryId);
       return;
     }
 
     const updatedOk = await clickUpdatePart();
     if (!updatedOk) {
-      // Nothing to update might mean we're already done — recheck counts before giving up.
-      const recheck = parseSelectedCounts();
-      if (isFinished(recheck)) {
-        finish('All parts have been updated (remaining total reached 0).');
-        return;
-      }
-      handleFailure('Failed to click "Update Part".');
+      handleFailure('Failed to click "Update Part".', libraryId);
       return;
     }
 
     consecutiveFailures = 0;
     log('Clicked. Waiting for the site to finish processing this batch (real server-side rendering — moving on the instant it completes)...');
-    const after = await waitForBatchToFinish(before ? before.total : -1);
+    const after = await waitForBatchToFinish(libraryId, before);
 
-    if (isFinished(after)) {
-      finish('All parts have been updated (remaining total reached 0).');
+    if (after === 0) {
+      finish('All parts have been updated (0 remaining).');
       return;
     }
 
-    if (before && after && after.total === before.total) {
-      handleFailure(`No progress after waiting ${Math.round(MAX_BATCH_WAIT_MS / 60000)} min on this batch — it may still be processing.`);
+    if (after === before) {
+      handleFailure(`No progress after waiting ${Math.round(MAX_BATCH_WAIT_MS / 60000)} min on this batch — it may still be processing.`, libraryId);
       return;
     }
 
     if (running) {
-      setTimeout(runCycle, POLL_INTERVAL_MS);
+      setTimeout(() => runCycle(libraryId), POLL_INTERVAL_MS);
     }
   }
 
-  function handleFailure(reason) {
+  function handleFailure(reason, libraryId) {
     consecutiveFailures += 1;
     log(`${reason} (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       stop(`Stopped after repeated failures: ${reason}`);
       return;
     }
-    setTimeout(runCycle, POLL_INTERVAL_MS * 3);
+    setTimeout(() => runCycle(libraryId), POLL_INTERVAL_MS * 3);
   }
 
   function finish(message) {
@@ -301,11 +325,16 @@
 
     btn.addEventListener('click', () => {
       if (!running) {
+        const libraryId = getLibraryIdFromUrl();
+        if (!libraryId) {
+          alert('Could not find "extendlibraryid" in the page URL — cannot check the real remaining count.');
+          return;
+        }
         running = true;
         consecutiveFailures = 0;
         updateButtonUi();
         log('Starting auto update loop...');
-        runCycle();
+        runCycle(libraryId);
       } else {
         log('Stopping auto update loop (user requested).');
         running = false;
