@@ -1,4 +1,4 @@
-ProductID,MaterialName,MTY,MFC,MTH,MSC,MGC,EBAC,EBIC,EBBN,EBDC,EB1,EB2,EB3,EB4,EB5,EB6
-123456,Sample Material A,Wood,Glossy,18mm,12.50,2.00,ART-001,INT-001,BrandOne,Edge band description text,0.80,1.00,2.00,1.00,1.30,1.30
-123457,Sample Material B,Laminate,Matt,,,,,,,,,,,,,
-123458,Sample Material C,,,,,,,,,,,,,DELETE,,
+ProductID,MaterialName,MTY,MFC,MTH,MSC,MGC,EBAC,EBIC,EBBN,EBDC,22_0p8,22_1p0,22_2p0,23_1p3,30_0p8,30_2p0,45_0p8,45_2p0
+123456,Sample Material A,Wood,Glossy,18mm,12.50,2.00,ART-001,INT-001,BrandOne,Edge band description text,0.80,1.00,2.00,1.30,0.80,2.00,0.80,2.00
+123457,Sample Material B,Laminate,Matt,,,,,,,,,,,,,,,
+123458,Sample Material C,,,,,,,,,,,,,DELETE,,,,
