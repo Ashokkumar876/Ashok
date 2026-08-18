@@ -1652,20 +1652,6 @@
                 // asset types — formulaLimit is always "0" on every
                 // Material/Style Advanced Formula sample seen.
                 input.extAttr.formulaLimit = { value: '0', displayName: null, valueType: null };
-            } else if (dType === 'formula' && row.expressionType === 'condition') {
-                // Plain Formula (not Advanced Formula) carrying a structured
-                // {"cases":...} condition block on an asset type — same
-                // formulaForm:1 shape Advanced Formula uses, just under the
-                // plain Formula data type per explicit user requirement.
-                // Every condition-formula asset sample confirmed so far
-                // (VGF, HNS) carries status:1 when its default comes from
-                // the formula — applying that same marker here since the
-                // formula shape itself is identical; unconfirmed against a
-                // real native sample of this specific "Formula, not
-                // Advanced Formula" combination, so verify against the next
-                // server response. No formulaLimit key here — that only
-                // appeared on genuine Advanced Formula samples.
-                input.status = row.defaultState === 'formula' ? 1 : 0;
             } else if (dType !== 'formula' && dType !== 'options') {
                 input.link = null; input.linkForm = 0; input.formula = null; input.formulaForm = 0;
                 if (input.extAttr) delete input.extAttr.formulaLimit;
