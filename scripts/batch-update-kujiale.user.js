@@ -1652,9 +1652,17 @@
                 // asset types — formulaLimit is always "0" on every
                 // Material/Style Advanced Formula sample seen.
                 input.extAttr.formulaLimit = { value: '0', displayName: null, valueType: null };
-            } else if (dType !== 'formula' && dType !== 'options') {
-                input.link = null; input.linkForm = 0; input.formula = null; input.formulaForm = 0;
+            } else {
+                // status:1/formulaLimit are an Advanced-Formula-only concept.
+                // An existing input may still carry a stale status:1 from a
+                // prior edit (compileParamEditRow only sets status via
+                // newInputSkeleton for brand-new inputs) — force it back to
+                // -1 here so plain Formula/Options rows can never inherit it.
+                input.status = -1;
                 if (input.extAttr) delete input.extAttr.formulaLimit;
+                if (dType !== 'formula' && dType !== 'options') {
+                    input.link = null; input.linkForm = 0; input.formula = null; input.formulaForm = 0;
+                }
             }
         } else {
             const isOptionsFamily = paramTypeId === 2 || paramTypeId === 7;
