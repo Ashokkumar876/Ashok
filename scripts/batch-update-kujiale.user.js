@@ -440,6 +440,13 @@
     runErrorBtn.onclick = () => { downloadCsvReport(lastRunErrors, 'batch_run_errors', ['Model ID', 'Error'], e => [e.id, e.msg]); };
     body.appendChild(runErrorBtn);
 
+    const extractBtn = document.createElement('button');
+    extractBtn.id = 'extract-params-btn';
+    extractBtn.style.cssText = 'width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #0071e3; color:#0071e3; background:#fff; font-size:11px; cursor:pointer; font-weight:bold;';
+    extractBtn.innerText = '📤 Extract Parameters to Sheet';
+    extractBtn.onclick = () => { openExtractor(); };
+    body.appendChild(extractBtn);
+
     document.body.appendChild(box);
 
     const trigger = document.createElement('button');
@@ -1709,6 +1716,122 @@
         applyImosOutput(ed, row.refName, row.imosOutputCondition);
     }
 
+    // =========================================================================
+    // SECTION 5b2: PARAMETER EXTRACTION (editorData -> Parameter Add sheet)
+    // =========================================================================
+    // The reverse of compileParamEditRow: given a live model's editorData,
+    // produce rows in the exact column shape the Parameter Add sheet expects,
+    // so an existing model's current parameters can be pulled down and fed
+    // straight back in as a batch-edit CSV.
+    const PARAM_EXPORT_HEADERS = [
+        'Product Name', 'Product serial number', 'Parameter Category', 'Grouping',
+        'Parameter type', 'Data type', 'Display Name', 'Parameter Name', 'Value',
+        'Minimum', 'Maximum', 'Step size', 'Options', 'Expression', 'Hide condition',
+        'Locked condition', 'IMOS Output Condition', 'Default state', 'Composite type',
+        'Value relationships', 'Range Type', 'Expression Type'
+    ];
+    const DTYPE_BY_PARAM_TYPE_ID = { 0: 'Unlimited', 1: 'Range', 2: 'Options', 3: 'Interval', 4: 'Advanced Formula', 5: 'Formula', 6: 'Fixed Value', 7: 'Advanced Formula' };
+    const PTYPE_BY_VALUE_TYPE = { int: 'Integer', string: 'Text', boolean: 'Boolean', booleanlist: 'Multiple Boolean Values', float2: 'Float2', float: 'Float' };
+
+    // A model's saved asset case values are the WRAPPED form (bare id for
+    // Material/Contour, {obsBrandGoodId,versionId} JSON for Style — see
+    // Utils.wrapAssetValue) — unwrap back to a bare id so the exported sheet
+    // matches the convention the Parameter Add sheet's own columns already
+    // use (confirmed against a real sample: bare ids in every case, never
+    // JSON) and so a re-import doesn't have to special-case already-wrapped
+    // input.
+    function unwrapAssetVal(v) {
+        if (v === null || v === undefined || v === '') return '';
+        const s = String(v).trim();
+        if (s.startsWith('#') || s.startsWith('@')) return s;
+        if (s.startsWith('{')) {
+            try { const o = JSON.parse(s); if (o && o.obsBrandGoodId) return o.obsBrandGoodId; } catch (e) { /* not JSON after all — fall through */ }
+        }
+        return s;
+    }
+    function unwrapConditionCaseValues(raw) {
+        if (!raw) return '';
+        let obj;
+        try { obj = JSON.parse(raw); } catch (e) { return raw; }
+        if (Array.isArray(obj.cases)) obj.cases.forEach(c => { if (c.value !== undefined) c.value = unwrapAssetVal(c.value); });
+        if (obj.defaultValue !== undefined) obj.defaultValue = unwrapAssetVal(obj.defaultValue);
+        return JSON.stringify(obj);
+    }
+    function float2ValueToPair(v) {
+        if (v === null || v === undefined || v === '') return '';
+        try { const o = JSON.parse(v); return `${o.x},${o.y}`; } catch (e) { return v; }
+    }
+
+    function extractParamsFromEditorData(ed, modelId) {
+        const groupOf = (paramName) => {
+            const g = (ed.customParamGroups || []).find(g => (g.paramNames || []).includes(paramName));
+            return g ? g.groupName : '';
+        };
+        const imosOf = (paramName) => {
+            const p = ((ed.outputConfig && ed.outputConfig.productionParams) || []).find(p => p.paramName === paramName);
+            return (p && p.output && p.formulaOutput) ? p.formulaOutput : '';
+        };
+
+        return (ed.inputs || [])
+            // selfHealReferencedVars() placeholder stubs aren't real
+            // authored parameters — leave them out of the exported sheet.
+            .filter(input => !input.generated)
+            .map(input => {
+                const isAsset = ASSET_TYPES.includes(input.valueType);
+                const paramTypeId = input.paramTypeId;
+                const isAdvFormula = paramTypeId === 4 || paramTypeId === 7;
+                const row = {
+                    productName: '',
+                    serial: modelId,
+                    paramCategory: input.globalId ? 'Global' : 'Local',
+                    grouping: groupOf(input.paramName),
+                    paramType: isAsset ? (input.valueType.charAt(0).toUpperCase() + input.valueType.slice(1)) : (PTYPE_BY_VALUE_TYPE[input.valueType] || 'Float'),
+                    dataType: DTYPE_BY_PARAM_TYPE_ID[paramTypeId] || 'Unlimited',
+                    displayName: input.displayName || '',
+                    paramName: input.paramName,
+                    value: isAsset ? unwrapAssetVal(input.value) : (input.valueType === 'float2' ? float2ValueToPair(input.value) : (input.value != null ? input.value : '')),
+                    min: isAsset ? '' : (input.min != null ? input.min : ''),
+                    max: isAsset ? '' : (input.max != null ? input.max : ''),
+                    step: isAsset ? '' : (input.step != null ? input.step : ''),
+                    options: '',
+                    expression: '',
+                    hideCondition: input.ignore != null ? input.ignore : '',
+                    lockedCondition: (input.extAttr && input.extAttr['diy-immutable'] && input.extAttr['diy-immutable'].value) || '',
+                    imosOutputCondition: imosOf(input.paramName),
+                    defaultState: isAdvFormula ? (input.status === 1 ? 'Formula' : 'Value') : '',
+                    compositeType: (!isAsset && isAdvFormula) ? (paramTypeId === 7 ? 'Options' : 'Range') : '',
+                    valueRelationship: '',
+                    materialRange: '',
+                    expressionType: ''
+                };
+
+                if (isAsset) {
+                    if (input.link) {
+                        row.materialRange = input.linkForm === 1 ? 'Condition' : 'Select';
+                        row.options = input.linkForm === 1 ? unwrapConditionCaseValues(input.link) : input.link;
+                    }
+                    if (input.formula) {
+                        row.expressionType = input.formulaForm === 1 ? 'Condition' : 'Reference';
+                        row.expression = input.formulaForm === 1 ? unwrapConditionCaseValues(input.formula) : input.formula;
+                    }
+                } else {
+                    if (paramTypeId === 2 && Array.isArray(input.editorOptions) && input.editorOptions.length) {
+                        row.options = JSON.stringify(input.editorOptions.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                    } else if ((paramTypeId === 1 || paramTypeId === 3 || paramTypeId === 4) && Array.isArray(input.editorRecommends) && input.editorRecommends.length) {
+                        row.options = JSON.stringify(input.editorRecommends.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                    }
+                    if ((isAdvFormula || paramTypeId === 5) && input.formula) {
+                        row.expression = input.formula;
+                    }
+                    if (isAdvFormula) {
+                        const fl = input.extAttr && input.extAttr.formulaLimit;
+                        row.valueRelationship = (fl && String(fl.value) === '1') ? 'Within' : 'Outside';
+                    }
+                }
+                return row;
+            });
+    }
+
     function selfHealReferencedVars(ed) {
         if (!ed.inputs) return;
         // Scoped to ed.inputs ONLY — a "#xyz" reference only ever resolves
@@ -2497,6 +2620,61 @@
                 const j = await r.json();
                 resA.value = JSON.stringify(j.editorData, null, 4);
             } catch (e) { resA.value = "Fail: " + (e.message || e); }
+        };
+    }
+
+    // Pulls one or more live models' current parameters (top-level
+    // ed.inputs[], same scope the Parameter Add/Delete sheets cover) and
+    // writes them out via extractParamsFromEditorData(), so an existing
+    // model can be reviewed/edited as a CSV instead of read back out of raw
+    // JSON by hand.
+    function openExtractor() {
+        const existing = document.getElementById('extract-modal'); if (existing) return;
+        const d = document.createElement('div'); d.id = 'extract-modal';
+        Object.assign(d.style, { position: 'fixed', top: '100px', left: '700px', width: '450px', height: '550px', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
+        d.innerHTML = `<div style="padding:12px; background:#f5f5f7; border-bottom:1px solid #eee; font-size:10px; font-weight:bold; display:flex; justify-content:space-between;">PARAMETER EXTRACTOR <span id="close-extract" style="cursor:pointer; font-size:14px; color:#aaa;">✕</span></div>
+            <div style="padding:12px; flex:1; display:flex; flex-direction:column; gap:10px;">
+                <div style="font-size:10px; color:#888;">One Model ID per line (or comma-separated).</div>
+                <textarea id="extract-ids" placeholder="3FO3EYXBY6I1&#10;3FO3G5M9IGV2&#10;..." style="width:100%; height:90px; font-family:monospace; font-size:11px; padding:8px; border:1px solid #ddd; border-radius:6px; outline:none; resize:none; box-sizing:border-box;"></textarea>
+                <button id="do-extract" style="width:100%; padding:10px; background:#0071e3; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract to CSV</button>
+                <textarea id="extract-log" readonly style="flex:1; width:100%; font-family:monospace; font-size:10.5px; padding:10px; border:1px solid #eee; background:#fafafa; border-radius:6px; outline:none; resize:none;"></textarea>
+            </div>`;
+        document.body.appendChild(d);
+        const idsIn = d.querySelector('#extract-ids'); const logA = d.querySelector('#extract-log'); const goBtn = d.querySelector('#do-extract');
+        d.querySelector('#close-extract').onclick = () => { d.remove(); };
+        goBtn.onclick = async () => {
+            const ids = [...new Set(idsIn.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean))];
+            if (ids.length === 0) return;
+            goBtn.disabled = true; goBtn.innerText = 'Extracting...';
+            const tool = currentToolType();
+            const allRows = []; const errors = [];
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
+                logA.value = `Fetching ${i + 1}/${ids.length}: ${id}...`;
+                try {
+                    const r = await fetchWithRetry(`${window.location.origin}/editor/api/site/editordata?obsbrandgoodid=${encodeURIComponent(id)}&tooltype=${tool}`, { credentials: 'include' });
+                    if (!r.ok) throw new Error(`GET failed, status ${r.status}`);
+                    const j = await r.json();
+                    if (!j.editorData) throw new Error('No editorData in response.');
+                    const rows = extractParamsFromEditorData(j.editorData, id);
+                    allRows.push(...rows);
+                    logA.value += ` ✅ ${rows.length} params\n`;
+                } catch (e) {
+                    errors.push(`${id}: ${e.message || e}`);
+                    logA.value += ` ❌ ${e.message || e}\n`;
+                }
+            }
+            if (allRows.length > 0) {
+                downloadCsvReport(allRows, 'params_extract', PARAM_EXPORT_HEADERS, r => [
+                    r.productName, r.serial, r.paramCategory, r.grouping, r.paramType, r.dataType,
+                    r.displayName, r.paramName, r.value, r.min, r.max, r.step, r.options, r.expression,
+                    r.hideCondition, r.lockedCondition, r.imosOutputCondition, r.defaultState,
+                    r.compositeType, r.valueRelationship, r.materialRange, r.expressionType
+                ]);
+            }
+            logA.value += `\nDone. ${allRows.length} parameter(s) from ${ids.length - errors.length}/${ids.length} model(s).`;
+            if (errors.length > 0) logA.value += `\n\nFailed:\n${errors.join('\n')}`;
+            goBtn.disabled = false; goBtn.innerText = 'Extract to CSV';
         };
     }
 
