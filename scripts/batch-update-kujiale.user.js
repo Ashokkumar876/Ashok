@@ -2214,6 +2214,24 @@
         return window.location.href.includes('cabinet') ? 'cabinet' : 'wardrobe';
     }
 
+    // Every "Failed to fetch" seen in batch runs is a bare TypeError from
+    // fetch() itself — connection reset/dropped mid-request, never an HTTP
+    // status (those are handled separately via resp.ok). Confirmed via
+    // native-UI "Copy as fetch" comparison that the request shape itself is
+    // correct, so a single transient network blip shouldn't fail an entire
+    // model. Retries ONLY the network-layer throw, never a resolved
+    // response — a real 4xx/5xx still surfaces immediately to the caller.
+    async function fetchWithRetry(url, opts, attempts = 3, delayMs = 1500) {
+        for (let i = 0; i < attempts; i++) {
+            try {
+                return await fetch(url, opts);
+            } catch (e) {
+                if (i === attempts - 1) throw e;
+                await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+            }
+        }
+    }
+
     async function processModel(modelId, data) {
         const origin = window.location.origin;
         const tool = currentToolType();
@@ -2221,7 +2239,7 @@
 
         let resp;
         try {
-            resp = await fetch(`${origin}/editor/api/site/editordata?obsbrandgoodid=${modelId}&tooltype=${tool}`, { headers: hdrs, credentials: 'include' });
+            resp = await fetchWithRetry(`${origin}/editor/api/site/editordata?obsbrandgoodid=${modelId}&tooltype=${tool}`, { headers: hdrs, credentials: 'include' });
         } catch (e) {
             return { ok: false, msg: `GET network error: ${e.message}` };
         }
@@ -2367,7 +2385,7 @@
 
         let save;
         try {
-            save = await fetch(`${origin}/editor/api/site/editordata`, {
+            save = await fetchWithRetry(`${origin}/editor/api/site/editordata`, {
                 method: 'POST', credentials: 'include',
                 headers: { "content-type": "text/plain;utf-8", ...hdrs },
                 body: JSON.stringify({ editorData: ed, paramModelInfo: json.paramModelInfo })
@@ -2378,7 +2396,7 @@
         if (!save.ok) return { ok: false, msg: `POST failed, status ${save.status}` };
 
         try {
-            await fetch(`${origin}/editortask/editordata/review`, {
+            await fetchWithRetry(`${origin}/editortask/editordata/review`, {
                 method: 'POST', credentials: 'include',
                 headers: { "content-type": "application/json", ...hdrs },
                 body: JSON.stringify({ obsBrandGoodIds: [modelId], skipTest: CONFIG.REVIEW_SKIP_TEST, toolType: tool })
@@ -2415,7 +2433,7 @@
     // directly ("参数值错误" alone gives no clue which of N parameters failed).
     async function callValidateApi(bodyStr, inputs) {
         try {
-            const resp = await fetch(`${window.location.origin}/editor/api/site/3d?prodcatid=${CONFIG.PRODCATID}&compress=false`, {
+            const resp = await fetchWithRetry(`${window.location.origin}/editor/api/site/3d?prodcatid=${CONFIG.PRODCATID}&compress=false`, {
                 method: 'POST', credentials: 'include',
                 headers: { "accept": "*/*", "content-type": "text/plain;utf-8", "editor-locale": "zh_CN" },
                 body: bodyStr
