@@ -4,13 +4,14 @@
 // @description  Batch-creates Global (library-level) parameters on Kujiale/Coohom's Global Parameters page from a CSV, one POST per row to the globalinput endpoint.
 // @match        https://www.homworksstudio.com/pub/tool/cpm/editor/globalvariable*
 // @match        https://prod-test-sg.coohom.com/pub/tool/cpm/editor/globalvariable*
+// @grant        none
+// ==/UserScript==
+
 // kujiale.com's own Global Parameters page uses a different base path than
 // /pub/tool/cpm (the sibling script's kujiale.com @match is /vc/modeleditor/new,
 // NOT /pub/tool/cpm/modeleditor/new) — no capture of that URL yet, so it's
-// deliberately left out rather than guessed. Add a @match line for it once
+// deliberately left out rather than guessed. Add a @match line above once
 // you send its real URL.
-// @grant        none
-// ==/UserScript==
 
 (function () {
     'use strict';
