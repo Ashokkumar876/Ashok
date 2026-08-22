@@ -64,9 +64,20 @@
     function findParamArray(json) {
         if (looksLikeParamArray(json)) return json;
         if (json && typeof json === 'object') {
+            // Common wrapper keys first, then fall back to scanning every
+            // key one level deep (and one level further under each) in
+            // case the real wrapper key isn't one of the guessed ones.
             for (const key of ['data', 'list', 'items', 'result', 'results', 'globalInputs', 'content', 'records']) {
                 if (looksLikeParamArray(json[key])) return json[key];
                 if (json[key] && typeof json[key] === 'object' && looksLikeParamArray(json[key].list)) return json[key].list;
+            }
+            for (const key of Object.keys(json)) {
+                if (looksLikeParamArray(json[key])) return json[key];
+                if (json[key] && typeof json[key] === 'object' && !Array.isArray(json[key])) {
+                    for (const innerKey of Object.keys(json[key])) {
+                        if (looksLikeParamArray(json[key][innerKey])) return json[key][innerKey];
+                    }
+                }
             }
         }
         return null;
@@ -84,7 +95,14 @@
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching page start=${start}`);
         const json = await resp.json();
-        return findParamArray(json) || [];
+        const arr = findParamArray(json);
+        if (arr === null && start === 0) {
+            // Nothing matched the shape heuristic on the very first page —
+            // surface exactly what came back instead of silently returning
+            // empty, so a shape mismatch is diagnosable from the log alone.
+            throw new Error(`Response didn't match the expected shape. Raw JSON: ${JSON.stringify(json).slice(0, 500)}`);
+        }
+        return arr || [];
     }
 
     // Walks every page automatically — the native UI only ever fetches one
