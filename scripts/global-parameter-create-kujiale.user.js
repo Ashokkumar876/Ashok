@@ -5,7 +5,6 @@
 // @match        https://www.homworksstudio.com/pub/tool/cpm/editor/globalvariable*
 // @match        https://prod-test-sg.coohom.com/pub/tool/cpm/editor/globalvariable*
 // @grant        none
-// @run-at       document-start
 // ==/UserScript==
 
 // kujiale.com's own Global Parameters page uses a different base path than
@@ -41,30 +40,27 @@
     let parsedRows = null; // [{rowNum, ...compiled fields}]
     let preValidationErrors = [];
     let lastRunErrors = [];
-    let lastLibraryCapture = null; // { items: [...raw item objects...] }
 
     // =========================================================================
-    // SECTION 0b: PASSIVE LIBRARY-LIST CAPTURE
+    // SECTION 0b: EXISTING LIBRARY PARAMETER LIST
     // =========================================================================
-    // This page (see the No./Name/Reference name/... table) already lists
-    // every existing global parameter in the library — it has to call some
-    // endpoint to get that data, but that endpoint has never been captured
-    // via "Copy as fetch", so its URL and exact response shape aren't
-    // confirmed. Rather than guess a URL, hook fetch/XHR the same way the
-    // sibling Sort Model script does and passively grab whatever response
-    // the PAGE ITSELF requests — no URL assumption needed, only a shape
-    // heuristic: an array (top-level, or under a common wrapper key) whose
-    // items each have both paramName and displayName, since those are the
-    // two field names confirmed real from the create endpoint's own body.
-    // If the list endpoint uses different field names, the heuristic won't
-    // match — the log/status area shows the sample keys of anything
-    // captured so a mismatch is visible immediately, not silently wrong.
+    // Confirmed via a real "Copy as fetch" capture of this page's own list
+    // request: POST globalinput/new?start=&num=15&obsLibraryId=..., body
+    // "[]", paginated (start advances by num each page; a short/empty page
+    // means the end has been reached). Every item in the response reuses
+    // the exact same field names as buildGlobalInputBody's own create
+    // request (paramName, displayName, valueType, paramTypeId, editorOptions,
+    // link, formula, ignore, tags, group.obsId, ...) — confirmed by the
+    // captured response body, not assumed.
     function looksLikeParamArray(arr) {
         return Array.isArray(arr) && arr.length > 0 &&
             typeof arr[0] === 'object' && arr[0] !== null &&
             typeof arr[0].paramName === 'string' && typeof arr[0].displayName === 'string';
     }
 
+    // The one real capture returned a bare array, but this tolerates a
+    // wrapper object too in case a library with different content shapes
+    // it differently (e.g. {total, list:[...]}).
     function findParamArray(json) {
         if (looksLikeParamArray(json)) return json;
         if (json && typeof json === 'object') {
@@ -76,41 +72,42 @@
         return null;
     }
 
-    function handleCapturedResponse(url, text) {
-        let json;
-        try { json = JSON.parse(text); } catch (e) { return; }
-        const arr = findParamArray(json);
-        if (!arr) return;
-        lastLibraryCapture = { items: arr, sourceUrl: url };
-        const sampleKeys = Object.keys(arr[0]).slice(0, 10).join(', ');
-        setLibraryStatus(`Captured ${arr.length} existing parameter(s) from the page. Sample fields: ${sampleKeys}`);
+    async function fetchLibraryParamsPage(obsLibraryId, start, num) {
+        const origin = window.location.origin;
+        const url = `${origin}/editor/api/site/globalinput/new?start=${start}&num=${num}&obsLibraryId=${encodeURIComponent(obsLibraryId)}`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            mode: 'cors',
+            headers: { accept: '*/*', 'content-type': 'application/json;charset=UTF-8', 'editor-locale': 'en_IN', 'x-qh-locale': 'en_IN', 'x-qh-site': 'coohom' },
+            body: '[]'
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching page start=${start}`);
+        const json = await resp.json();
+        return findParamArray(json) || [];
     }
 
-    const origFetch = window.fetch;
-    window.fetch = function (...args) {
-        const req = args[0];
-        const url = typeof req === 'string' ? req : (req && req.url) || '';
-        return origFetch.apply(this, args).then((res) => {
-            res.clone().text().then((text) => handleCapturedResponse(url, text)).catch(() => {});
-            return res;
-        });
-    };
-    const origXhrOpen = XMLHttpRequest.prototype.open;
-    const origXhrSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-        this.__capturedUrl = url;
-        return origXhrOpen.call(this, method, url, ...rest);
-    };
-    XMLHttpRequest.prototype.send = function (...args) {
-        this.addEventListener('load', () => {
-            if (this.__capturedUrl) handleCapturedResponse(this.__capturedUrl, this.responseText);
-        });
-        return origXhrSend.apply(this, args);
-    };
-
-    let libraryStatusEl = null;
-    function setLibraryStatus(msg) {
-        if (libraryStatusEl) libraryStatusEl.textContent = msg;
+    // Walks every page automatically — the native UI only ever fetches one
+    // page (num=15) at a time as you click through, which is why the
+    // earlier passive-capture approach only ever saw whichever page you'd
+    // last viewed. This calls the confirmed endpoint directly and keeps
+    // going until a short page signals the last one, so Export always
+    // covers the whole library regardless of how many pages you've clicked
+    // through in the UI.
+    async function fetchAllLibraryParams(obsLibraryId, onProgress) {
+        const num = 15; // matches the one confirmed real capture exactly
+        let start = 0;
+        const all = [];
+        while (true) {
+            const page = await fetchLibraryParamsPage(obsLibraryId, start, num);
+            if (page.length === 0) break;
+            all.push(...page);
+            if (onProgress) onProgress(all.length);
+            if (page.length < num) break; // last page
+            start += num;
+            if (start > 50000) break; // sanity guard against runaway pagination
+        }
+        return all;
     }
 
     // =========================================================================
@@ -240,16 +237,10 @@
         return s;
     }
 
-    // Best-effort decode of one captured library item into an EXPORT_HEADERS
+    // Decodes one item from fetchAllLibraryParams() into an EXPORT_HEADERS
     // row. Field names (paramName/displayName/valueType/paramTypeId/value/
     // min/max/step/editorOptions/link/formula/ignore/description/required/
-    // tags/group) are assumed to match buildGlobalInputBody's own body shape
-    // one-for-one — reasonable since that shape IS confirmed real for this
-    // endpoint's create direction, but the list/GET response was captured
-    // passively (see SECTION 0b), not from a real "Copy as fetch", so this
-    // mapping is unverified. Any field that comes back missing/differently
-    // named just ends up blank in that column — check the exported CSV
-    // against what the page's own table shows before trusting it at scale.
+    // tags/group) match the real captured response body one-for-one.
     function decodeLibraryItem(item) {
         const isAsset = ASSET_TYPES.includes(item.valueType);
         const paramTypeId = item.paramTypeId;
@@ -558,11 +549,6 @@
     // =========================================================================
     // SECTION 5: UI
     // =========================================================================
-    // Deferred until the DOM is ready (see the bottom of the file) — the
-    // fetch/XHR capture hooks above run immediately at document-start so
-    // they're in place before this page's own scripts make their first
-    // requests, but building this panel needs document.body to exist.
-    function buildUI() {
     const box = document.createElement('div');
     Object.assign(box.style, {
         position: 'fixed', top: '70px', left: '350px', width: '320px',
@@ -587,34 +573,48 @@
     infoLine.innerText = 'Creates NEW global parameters only (no edit/delete yet — no confirmed sample for those). Columns: Display Name, Parameter Name, Parameter type, Data type, Value, Minimum, Maximum, Step size, Options, Expression, Hide condition, Description, Required, Tags, Group Id. Export CSV re-exports the currently loaded rows.';
     body.appendChild(infoLine);
 
-    // Existing-parameters export: this table's own list request is captured
-    // passively (SECTION 0b) rather than called directly, since its exact
-    // URL/shape was never confirmed via a real "Copy as fetch". If the page
-    // hasn't made that request since this script loaded, reload the page
-    // once so the hook is in place before the initial load fires.
+    // Existing-parameters export: fetches every page of this library's
+    // parameter list directly (see fetchAllLibraryParams, SECTION 0b) — not
+    // limited to whichever page you've clicked to in the table.
     const libPanel = document.createElement('div');
     libPanel.style.cssText = 'padding:10px; background:#f9f9fb; border-radius:8px; border:1px solid #eee; margin-bottom:10px;';
     libPanel.innerHTML = '<div style="font-size:9px; font-weight:700; margin-bottom:6px; color:#0071e3;">Existing library parameters</div>';
     const libStatus = document.createElement('div');
     libStatus.style.cssText = 'font-size:9px; color:#999; margin-bottom:8px; line-height:1.4;';
-    libStatus.textContent = 'Waiting to see the page load its parameter list — reload this page if nothing appears here.';
-    libraryStatusEl = libStatus;
+    libStatus.textContent = 'Fetches every page of this library and exports them all in one CSV.';
     libPanel.appendChild(libStatus);
     const exportExistingBtn = document.createElement('button');
     exportExistingBtn.style.cssText = 'width:100%; padding:8px; border:1px solid #0071e3; background:#fff; color:#0071e3; border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold;';
     exportExistingBtn.innerText = '📥 Export Existing Parameters';
-    exportExistingBtn.onclick = () => {
-        if (!lastLibraryCapture || !lastLibraryCapture.items.length) {
-            showNotification('❌ Nothing captured yet — reload the page and try again.', THEME.danger);
+    exportExistingBtn.onclick = async () => {
+        const obsLibraryId = currentObsLibraryId();
+        if (!obsLibraryId) {
+            showNotification('❌ No obsCustomLibraryId in this page\'s URL.', THEME.danger);
             return;
         }
-        const rows = lastLibraryCapture.items.map(decodeLibraryItem);
-        downloadCsvReport(rows, 'global_params_library_export', EXPORT_HEADERS, r => [
-            r.displayName, r.paramName, r.pTypeLabel, r.dTypeLabel, r.value, r.min, r.max, r.step,
-            r.options, r.expression, r.hideCondition, r.description, r.required,
-            r.tags, r.groupId
-        ]);
-        showNotification(`✅ Exported ${rows.length} existing parameter(s). Verify a few rows against the page before trusting it at scale.`, THEME.success);
+        exportExistingBtn.disabled = true;
+        try {
+            const items = await fetchAllLibraryParams(obsLibraryId, (count) => {
+                libStatus.textContent = `Fetching... ${count} parameter(s) so far.`;
+            });
+            if (items.length === 0) {
+                showNotification('❌ No parameters returned — check the page is actually on this library.', THEME.danger);
+                return;
+            }
+            const rows = items.map(decodeLibraryItem);
+            downloadCsvReport(rows, 'global_params_library_export', EXPORT_HEADERS, r => [
+                r.displayName, r.paramName, r.pTypeLabel, r.dTypeLabel, r.value, r.min, r.max, r.step,
+                r.options, r.expression, r.hideCondition, r.description, r.required,
+                r.tags, r.groupId
+            ]);
+            libStatus.textContent = `Exported ${rows.length} existing parameter(s).`;
+            showNotification(`✅ Exported ${rows.length} existing parameter(s).`, THEME.success);
+        } catch (e) {
+            libStatus.textContent = `Failed: ${e.message}`;
+            showNotification(`❌ Export failed: ${e.message}`, THEME.danger);
+        } finally {
+            exportExistingBtn.disabled = false;
+        }
     };
     libPanel.appendChild(exportExistingBtn);
     body.appendChild(libPanel);
@@ -777,11 +777,4 @@
         }
         runBtn.disabled = false; runBtn.style.pointerEvents = 'auto';
     };
-    } // end buildUI
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', buildUI);
-    } else {
-        buildUI();
-    }
 })();
