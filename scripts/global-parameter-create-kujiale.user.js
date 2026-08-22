@@ -141,6 +141,13 @@
     };
     const ASSET_TYPES = ['material', 'style', 'contour'];
 
+    // Reverse of the pType/dType lowercasing above — used only to write a
+    // clean, re-importable CSV back out (Export CSV), never for compiling
+    // a request body.
+    const PTYPE_LABELS = { float: 'Float', integer: 'Integer', int: 'Integer', text: 'Text', string: 'Text', boolean: 'Boolean', material: 'Material', contour: 'Contour', style: 'Style' };
+    const DTYPE_LABELS = { unlimited: 'Unlimited', range: 'Range', options: 'Options', interval: 'Interval', formula: 'Formula', 'fixed value': 'Fixed Value', 'advanced formula': 'Advanced Formula' };
+    const EXPORT_HEADERS = ['Display Name', 'Parameter Name', 'Parameter type', 'Data type', 'Value', 'Minimum', 'Maximum', 'Step size', 'Options', 'Expression', 'Hide condition', 'Description', 'Required', 'Tags', 'Group Id'];
+
     function computeParamTypeId(dataType) {
         switch (dataType) {
             case 'unlimited': return 0;
@@ -428,7 +435,7 @@
 
     const infoLine = document.createElement('div');
     infoLine.style.cssText = 'font-size:9px; color:#999; margin-bottom:10px; line-height:1.5;';
-    infoLine.innerText = 'Creates NEW global parameters only (no edit/delete yet — no confirmed sample for those). Columns: Display Name, Parameter Name, Parameter type, Data type, Value, Minimum, Maximum, Step size, Options, Expression, Hide condition, Description, Required, Tags, Group Id.';
+    infoLine.innerText = 'Creates NEW global parameters only (no edit/delete yet — no confirmed sample for those). Columns: Display Name, Parameter Name, Parameter type, Data type, Value, Minimum, Maximum, Step size, Options, Expression, Hide condition, Description, Required, Tags, Group Id. Export CSV re-exports the currently loaded rows (not the library\'s existing parameters).';
     body.appendChild(infoLine);
 
     const panel = document.createElement('div');
@@ -464,6 +471,25 @@
     runErrorBtn.onclick = () => { downloadCsvReport(lastRunErrors, 'global_param_run_errors', ['Parameter Name', 'Error'], e => [e.id, e.msg]); };
     body.appendChild(runErrorBtn);
 
+    // Re-serializes the currently loaded CSV (parsedRows) back out in the
+    // exact same column format Import CSV reads — an echo/audit of what's
+    // staged to run, not a pull of parameters that already exist in the
+    // library (that would need a list/GET endpoint this script has never
+    // called, and nothing here guesses an endpoint shape without a real
+    // "Copy as fetch" capture backing it).
+    const exportBtn = document.createElement('button');
+    exportBtn.id = 'export-csv';
+    exportBtn.style.cssText = 'display:none; width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #0071e3; color:#0071e3; background:#fff; font-size:11px; cursor:pointer; font-weight:bold;';
+    exportBtn.innerText = '📤 Export CSV';
+    exportBtn.onclick = () => {
+        downloadCsvReport(parsedRows, 'global_params_export', EXPORT_HEADERS, r => [
+            r.displayName, r.paramName, PTYPE_LABELS[r.pType] || r.pType, DTYPE_LABELS[r.dType] || r.dType,
+            r.value, r.min, r.max, r.step, r.optionsRaw, r.expressionRaw, r.hideCondition, r.description,
+            r.required ? 'true' : 'false', (r.tags && r.tags.length) ? JSON.stringify(r.tags) : '', r.groupId
+        ]);
+    };
+    body.appendChild(exportBtn);
+
     document.body.appendChild(box);
 
     const trigger = document.createElement('button');
@@ -492,6 +518,7 @@
         document.getElementById('log-text').value = '';
         document.getElementById('error-download').style.display = 'none';
         document.getElementById('run-error-download').style.display = 'none';
+        document.getElementById('export-csv').style.display = 'none';
         document.getElementById('progress-label').innerText = '';
         runBtn.disabled = true; runBtn.style.backgroundColor = '#f0f0f2'; runBtn.style.pointerEvents = 'none';
         document.getElementById('sync-stats').innerText = 'IDLE';
@@ -534,6 +561,7 @@
             const skippedNote = preValidationErrors.length > 0 ? ` ${preValidationErrors.length} row(s) skipped (errors).` : '';
             document.getElementById('log-text').value = `✅ ${compiled.length} parameter(s) ready to create.${skippedNote}`;
             runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
+            document.getElementById('export-csv').style.display = 'block';
             showNotification(`✅ ${compiled.length} parameter(s) ready. Press Run.`, THEME.success);
         };
         reader.readAsText(file);
