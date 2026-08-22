@@ -5,6 +5,7 @@
 // @match        https://www.homworksstudio.com/pub/tool/cpm/editor/globalvariable*
 // @match        https://prod-test-sg.coohom.com/pub/tool/cpm/editor/globalvariable*
 // @grant        none
+// @run-at       document-start
 // ==/UserScript==
 
 // kujiale.com's own Global Parameters page uses a different base path than
@@ -40,6 +41,77 @@
     let parsedRows = null; // [{rowNum, ...compiled fields}]
     let preValidationErrors = [];
     let lastRunErrors = [];
+    let lastLibraryCapture = null; // { items: [...raw item objects...] }
+
+    // =========================================================================
+    // SECTION 0b: PASSIVE LIBRARY-LIST CAPTURE
+    // =========================================================================
+    // This page (see the No./Name/Reference name/... table) already lists
+    // every existing global parameter in the library — it has to call some
+    // endpoint to get that data, but that endpoint has never been captured
+    // via "Copy as fetch", so its URL and exact response shape aren't
+    // confirmed. Rather than guess a URL, hook fetch/XHR the same way the
+    // sibling Sort Model script does and passively grab whatever response
+    // the PAGE ITSELF requests — no URL assumption needed, only a shape
+    // heuristic: an array (top-level, or under a common wrapper key) whose
+    // items each have both paramName and displayName, since those are the
+    // two field names confirmed real from the create endpoint's own body.
+    // If the list endpoint uses different field names, the heuristic won't
+    // match — the log/status area shows the sample keys of anything
+    // captured so a mismatch is visible immediately, not silently wrong.
+    function looksLikeParamArray(arr) {
+        return Array.isArray(arr) && arr.length > 0 &&
+            typeof arr[0] === 'object' && arr[0] !== null &&
+            typeof arr[0].paramName === 'string' && typeof arr[0].displayName === 'string';
+    }
+
+    function findParamArray(json) {
+        if (looksLikeParamArray(json)) return json;
+        if (json && typeof json === 'object') {
+            for (const key of ['data', 'list', 'items', 'result', 'results', 'globalInputs', 'content', 'records']) {
+                if (looksLikeParamArray(json[key])) return json[key];
+                if (json[key] && typeof json[key] === 'object' && looksLikeParamArray(json[key].list)) return json[key].list;
+            }
+        }
+        return null;
+    }
+
+    function handleCapturedResponse(url, text) {
+        let json;
+        try { json = JSON.parse(text); } catch (e) { return; }
+        const arr = findParamArray(json);
+        if (!arr) return;
+        lastLibraryCapture = { items: arr, sourceUrl: url };
+        const sampleKeys = Object.keys(arr[0]).slice(0, 10).join(', ');
+        setLibraryStatus(`Captured ${arr.length} existing parameter(s) from the page. Sample fields: ${sampleKeys}`);
+    }
+
+    const origFetch = window.fetch;
+    window.fetch = function (...args) {
+        const req = args[0];
+        const url = typeof req === 'string' ? req : (req && req.url) || '';
+        return origFetch.apply(this, args).then((res) => {
+            res.clone().text().then((text) => handleCapturedResponse(url, text)).catch(() => {});
+            return res;
+        });
+    };
+    const origXhrOpen = XMLHttpRequest.prototype.open;
+    const origXhrSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+        this.__capturedUrl = url;
+        return origXhrOpen.call(this, method, url, ...rest);
+    };
+    XMLHttpRequest.prototype.send = function (...args) {
+        this.addEventListener('load', () => {
+            if (this.__capturedUrl) handleCapturedResponse(this.__capturedUrl, this.responseText);
+        });
+        return origXhrSend.apply(this, args);
+    };
+
+    let libraryStatusEl = null;
+    function setLibraryStatus(msg) {
+        if (libraryStatusEl) libraryStatusEl.textContent = msg;
+    }
 
     // =========================================================================
     // SECTION 1: TOAST
@@ -148,6 +220,68 @@
     const PTYPE_LABELS = { float: 'Float', integer: 'Integer', int: 'Integer', text: 'Text', string: 'Text', boolean: 'Boolean', material: 'Material', contour: 'Contour', style: 'Style' };
     const DTYPE_LABELS = { unlimited: 'Unlimited', range: 'Range', options: 'Options', interval: 'Interval', formula: 'Formula', 'fixed value': 'Fixed Value', 'advanced formula': 'Advanced Formula' };
     const EXPORT_HEADERS = ['Display Name', 'Parameter Name', 'Parameter type', 'Data type', 'Value', 'Minimum', 'Maximum', 'Step size', 'Options', 'Expression', 'Hide condition', 'Description', 'Required', 'Tags', 'Group Id'];
+
+    // Reverse of buildGlobalInputBody's own valueType/paramTypeId choices —
+    // used only for decoding a captured existing-parameter item back into a
+    // CSV row (Export Existing Parameters), never for compiling a request.
+    const VALUETYPE_TO_PTYPE_LABEL = { int: 'Integer', string: 'Text', boolean: 'Boolean', float: 'Float', material: 'Material', contour: 'Contour', style: 'Style' };
+    const DTYPE_LABEL_BY_PARAM_TYPE_ID = { 0: 'Unlimited', 1: 'Range', 2: 'Options', 3: 'Interval', 4: 'Advanced Formula', 5: 'Formula', 6: 'Fixed Value', 7: 'Advanced Formula' };
+
+    // Mirrors Utils.wrapAssetValue in reverse — a captured Style value comes
+    // back as {"obsBrandGoodId":...,"versionId":...}; unwrap to the bare id
+    // so Export writes the same convention Import reads.
+    function unwrapAssetVal(v) {
+        if (v === null || v === undefined || v === '') return '';
+        const s = String(v).trim();
+        if (s.startsWith('#') || s.startsWith('@')) return s;
+        if (s.startsWith('{')) {
+            try { const o = JSON.parse(s); if (o && o.obsBrandGoodId) return o.obsBrandGoodId; } catch (e) { /* not JSON after all */ }
+        }
+        return s;
+    }
+
+    // Best-effort decode of one captured library item into an EXPORT_HEADERS
+    // row. Field names (paramName/displayName/valueType/paramTypeId/value/
+    // min/max/step/editorOptions/link/formula/ignore/description/required/
+    // tags/group) are assumed to match buildGlobalInputBody's own body shape
+    // one-for-one — reasonable since that shape IS confirmed real for this
+    // endpoint's create direction, but the list/GET response was captured
+    // passively (see SECTION 0b), not from a real "Copy as fetch", so this
+    // mapping is unverified. Any field that comes back missing/differently
+    // named just ends up blank in that column — check the exported CSV
+    // against what the page's own table shows before trusting it at scale.
+    function decodeLibraryItem(item) {
+        const isAsset = ASSET_TYPES.includes(item.valueType);
+        const paramTypeId = item.paramTypeId;
+        const dTypeLabel = DTYPE_LABEL_BY_PARAM_TYPE_ID[paramTypeId] || 'Unlimited';
+        const row = {
+            displayName: item.displayName || '',
+            paramName: item.paramName || '',
+            pTypeLabel: VALUETYPE_TO_PTYPE_LABEL[item.valueType] || item.valueType || '',
+            dTypeLabel,
+            value: isAsset ? unwrapAssetVal(item.value) : (item.value != null ? item.value : ''),
+            min: isAsset ? '' : (item.min != null ? item.min : ''),
+            max: isAsset ? '' : (item.max != null ? item.max : ''),
+            step: isAsset ? '' : (item.step != null ? item.step : ''),
+            options: '',
+            expression: '',
+            hideCondition: (item.ignore && item.ignore !== 'false') ? item.ignore : '',
+            description: item.description || '',
+            required: item.required ? 'true' : 'false',
+            tags: (Array.isArray(item.tags) && item.tags.length) ? JSON.stringify(item.tags) : '',
+            groupId: (item.group && item.group.obsId) || ''
+        };
+        if (isAsset) {
+            if (item.link) row.options = unwrapAssetVal(item.link);
+            if (item.formula) row.expression = item.formula;
+        } else {
+            if (Array.isArray(item.editorOptions) && item.editorOptions.length) {
+                row.options = JSON.stringify(item.editorOptions.map((o) => ({ name: o.name || '', value: o.value, ignore: o.ignore || '' })));
+            }
+            if (item.formula) row.expression = item.formula;
+        }
+        return row;
+    }
 
     function computeParamTypeId(dataType) {
         switch (dataType) {
@@ -424,6 +558,11 @@
     // =========================================================================
     // SECTION 5: UI
     // =========================================================================
+    // Deferred until the DOM is ready (see the bottom of the file) — the
+    // fetch/XHR capture hooks above run immediately at document-start so
+    // they're in place before this page's own scripts make their first
+    // requests, but building this panel needs document.body to exist.
+    function buildUI() {
     const box = document.createElement('div');
     Object.assign(box.style, {
         position: 'fixed', top: '70px', left: '350px', width: '320px',
@@ -445,8 +584,40 @@
 
     const infoLine = document.createElement('div');
     infoLine.style.cssText = 'font-size:9px; color:#999; margin-bottom:10px; line-height:1.5;';
-    infoLine.innerText = 'Creates NEW global parameters only (no edit/delete yet — no confirmed sample for those). Columns: Display Name, Parameter Name, Parameter type, Data type, Value, Minimum, Maximum, Step size, Options, Expression, Hide condition, Description, Required, Tags, Group Id. Export CSV re-exports the currently loaded rows (not the library\'s existing parameters).';
+    infoLine.innerText = 'Creates NEW global parameters only (no edit/delete yet — no confirmed sample for those). Columns: Display Name, Parameter Name, Parameter type, Data type, Value, Minimum, Maximum, Step size, Options, Expression, Hide condition, Description, Required, Tags, Group Id. Export CSV re-exports the currently loaded rows.';
     body.appendChild(infoLine);
+
+    // Existing-parameters export: this table's own list request is captured
+    // passively (SECTION 0b) rather than called directly, since its exact
+    // URL/shape was never confirmed via a real "Copy as fetch". If the page
+    // hasn't made that request since this script loaded, reload the page
+    // once so the hook is in place before the initial load fires.
+    const libPanel = document.createElement('div');
+    libPanel.style.cssText = 'padding:10px; background:#f9f9fb; border-radius:8px; border:1px solid #eee; margin-bottom:10px;';
+    libPanel.innerHTML = '<div style="font-size:9px; font-weight:700; margin-bottom:6px; color:#0071e3;">Existing library parameters</div>';
+    const libStatus = document.createElement('div');
+    libStatus.style.cssText = 'font-size:9px; color:#999; margin-bottom:8px; line-height:1.4;';
+    libStatus.textContent = 'Waiting to see the page load its parameter list — reload this page if nothing appears here.';
+    libraryStatusEl = libStatus;
+    libPanel.appendChild(libStatus);
+    const exportExistingBtn = document.createElement('button');
+    exportExistingBtn.style.cssText = 'width:100%; padding:8px; border:1px solid #0071e3; background:#fff; color:#0071e3; border-radius:6px; cursor:pointer; font-size:11px; font-weight:bold;';
+    exportExistingBtn.innerText = '📥 Export Existing Parameters';
+    exportExistingBtn.onclick = () => {
+        if (!lastLibraryCapture || !lastLibraryCapture.items.length) {
+            showNotification('❌ Nothing captured yet — reload the page and try again.', THEME.danger);
+            return;
+        }
+        const rows = lastLibraryCapture.items.map(decodeLibraryItem);
+        downloadCsvReport(rows, 'global_params_library_export', EXPORT_HEADERS, r => [
+            r.displayName, r.paramName, r.pTypeLabel, r.dTypeLabel, r.value, r.min, r.max, r.step,
+            r.options, r.expression, r.hideCondition, r.description, r.required,
+            r.tags, r.groupId
+        ]);
+        showNotification(`✅ Exported ${rows.length} existing parameter(s). Verify a few rows against the page before trusting it at scale.`, THEME.success);
+    };
+    libPanel.appendChild(exportExistingBtn);
+    body.appendChild(libPanel);
 
     const panel = document.createElement('div');
     panel.style.cssText = 'padding:10px; background:#f9f9fb; border-radius:8px; border:1px solid #eee;';
@@ -606,4 +777,11 @@
         }
         runBtn.disabled = false; runBtn.style.pointerEvents = 'auto';
     };
+    } // end buildUI
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', buildUI);
+    } else {
+        buildUI();
+    }
 })();
