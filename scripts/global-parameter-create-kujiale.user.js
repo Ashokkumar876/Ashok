@@ -215,6 +215,15 @@
         return depth === 0;
     }
 
+    // Declared outside the row loop (rather than as a closure re-created on
+    // every iteration) so it doesn't capture loop-scoped variables directly
+    // — rowNum/refName come in as arguments instead, which is what a
+    // function defined inside a loop body isn't safely allowed to close
+    // over.
+    function makeAddErr(rowNum, refName) {
+        return (col, msg, fix) => preValidationErrors.push({ row: rowNum, refName, col, msg, fix });
+    }
+
     function validateAndCompileRows(rows, idx) {
         preValidationErrors = [];
         const compiled = [];
@@ -241,7 +250,7 @@
             const tagsRaw = cell(row, idx.tags);
             const groupId = cell(row, idx.groupId);
 
-            const addErr = (col, msg, fix) => preValidationErrors.push({ row: rowNum, refName: paramName || displayName, col, msg, fix });
+            const addErr = makeAddErr(rowNum, paramName || displayName);
 
             if (!displayName) addErr('Display Name', 'Display Name is required.');
             if (!paramName) addErr('Parameter Name', 'Parameter Name is required.');
