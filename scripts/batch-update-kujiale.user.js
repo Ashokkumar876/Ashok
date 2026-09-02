@@ -1832,6 +1832,113 @@
             });
     }
 
+    // =========================================================================
+    // SECTION 5b3: PART EXTRACTION (editorData -> Part Edit sheet)
+    // =========================================================================
+    // Reverse of compilePartEditRow: given a live model's editorData, produce
+    // rows in the exact column shape the Part Edit sheet expects, so an
+    // existing model's parts can be reviewed/bulk-edited as a CSV. Matches
+    // compilePartEditRow's own field mapping one-for-one (W/D/H, position,
+    // rotationDegree, invokedPosType, the Design Attribute flags, modelPackage,
+    // and everything else as a Custom Parameters entry).
+    const PART_EXPORT_HEADERS = [
+        'Product serial number', 'Child Serial Number', 'Part Name', 'Reference name',
+        'Style Parameter', 'Width', 'Depth', 'Height',
+        'Position X', 'Position Y', 'Position Z', 'Rotate X', 'Rotate Y', 'Rotate Z',
+        'Position Method', 'Hide Conditions', 'Replaceable', 'Quotation Required',
+        'Removable', 'Component Removable', 'Style Pack', 'BOM Output',
+        'Parameter Editable', 'Ignore Internal Interference',
+        'Reset the part after the suppression is released', 'Suppress condition',
+        'Custom Parameters'
+    ];
+
+    // Every part-level paramName that already has its own dedicated column
+    // above — anything else on the part is exported as a Custom Parameters
+    // entry instead. instanceOverride/invokedPos/offset are internal/
+    // structural fields, not meaningful to round-trip generically, so they're
+    // left out rather than cluttering every row with them.
+    const PART_RESERVED_PARAM_NAMES = new Set([
+        'W', 'D', 'H', 'position', 'rotationDegree', 'invokedPosType', 'ignore',
+        'replaceable', 'needQuotation', 'isDeletable', 'cascadeDelete', 'modelPackage',
+        'displayInCostList', 'paramOverride', 'ignoreInnerIntersect', 'resetWhenSuppress',
+        'KJL_model_suppress_param', 'instanceOverride', 'invokedPos', 'offset'
+    ]);
+
+    function findPartParam(instance, paramName) {
+        return (instance.parameters || []).find(p => p.paramName === paramName);
+    }
+
+    function decodeFloat3(raw) {
+        if (!raw) return { x: '', y: '', z: '' };
+        try {
+            const o = JSON.parse(raw);
+            return { x: o.x != null ? o.x : '', y: o.y != null ? o.y : '', z: o.z != null ? o.z : '' };
+        } catch (e) {
+            return { x: '', y: '', z: '' };
+        }
+    }
+
+    // Mirrors compilePartEditRow's own 3-way Custom Parameters dispatch
+    // (#-reference / Condition-JSON / direct) in reverse, so a re-imported
+    // value round-trips to the same asset-wrapped shape it started as.
+    function decodePartCustomParamValue(p) {
+        if (p.value === undefined || p.value === null || p.value === '') return undefined;
+        if (['material', 'style', 'contour'].includes(p.valueType)) {
+            const v = String(p.value).trim();
+            if (v.startsWith('#')) return v;
+            if (p.formulaForm === 1 && v.startsWith('{')) return unwrapConditionCaseValues(v);
+            return unwrapAssetVal(v);
+        }
+        return p.value;
+    }
+
+    function extractPartsFromEditorData(ed, modelId) {
+        return (ed.modelInstances || []).map(instance => {
+            const posP = findPartParam(instance, 'position');
+            const rotP = findPartParam(instance, 'rotationDegree');
+            const pos = decodeFloat3(posP && posP.value);
+            const rot = decodeFloat3(rotP && rotP.value);
+            const dim = (name) => {
+                const p = findPartParam(instance, name);
+                return (p && p.paramTypeId !== 5 && p.value != null) ? p.value : '';
+            };
+            const flag = (name) => {
+                const p = findPartParam(instance, name);
+                return (p && p.value != null) ? p.value : '';
+            };
+            const modelPackageP = findPartParam(instance, 'modelPackage');
+
+            const customEntries = (instance.parameters || [])
+                .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName))
+                .map(p => ({ paramName: p.paramName, value: decodePartCustomParamValue(p) }))
+                .filter(e => e.value !== undefined);
+
+            return {
+                serial: modelId,
+                childSerial: instance.obsBrandGoodId || '',
+                partName: instance.name || '',
+                partRefName: instance.refName || '',
+                styleParameter: instance.functionName || '',
+                width: dim('W'), depth: dim('D'), height: dim('H'),
+                positionX: pos.x, positionY: pos.y, positionZ: pos.z,
+                rotateX: rot.x, rotateY: rot.y, rotateZ: rot.z,
+                positionMethod: flag('invokedPosType'),
+                partHideCondition: flag('ignore'),
+                partReplaceable: flag('replaceable'),
+                partQuotationRequired: flag('needQuotation'),
+                partRemovable: flag('isDeletable'),
+                partComponentRemovable: flag('cascadeDelete'),
+                partStylePack: (modelPackageP && modelPackageP.value != null) ? modelPackageP.value : '',
+                partBomOutput: flag('displayInCostList'),
+                partParameterEditable: flag('paramOverride'),
+                partIgnoreInternalInterference: flag('ignoreInnerIntersect'),
+                partResetAfterSuppression: flag('resetWhenSuppress'),
+                partSuppressCondition: flag('KJL_model_suppress_param'),
+                customParameters: customEntries.length ? JSON.stringify(customEntries) : ''
+            };
+        });
+    }
+
     function selfHealReferencedVars(ed) {
         if (!ed.inputs) return;
         // Scoped to ed.inputs ONLY — a "#xyz" reference only ever resolves
@@ -2628,54 +2735,80 @@
     // writes them out via extractParamsFromEditorData(), so an existing
     // model can be reviewed/edited as a CSV instead of read back out of raw
     // JSON by hand.
+    async function fetchEditorDataFor(id, tool) {
+        const r = await fetchWithRetry(`${window.location.origin}/editor/api/site/editordata?obsbrandgoodid=${encodeURIComponent(id)}&tooltype=${tool}`, { credentials: 'include' });
+        if (!r.ok) throw new Error(`GET failed, status ${r.status}`);
+        const j = await r.json();
+        if (!j.editorData) throw new Error('No editorData in response.');
+        return j.editorData;
+    }
+
     function openExtractor() {
         const existing = document.getElementById('extract-modal'); if (existing) return;
         const d = document.createElement('div'); d.id = 'extract-modal';
-        Object.assign(d.style, { position: 'fixed', top: '100px', left: '700px', width: '450px', height: '550px', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
-        d.innerHTML = `<div style="padding:12px; background:#f5f5f7; border-bottom:1px solid #eee; font-size:10px; font-weight:bold; display:flex; justify-content:space-between;">PARAMETER EXTRACTOR <span id="close-extract" style="cursor:pointer; font-size:14px; color:#aaa;">✕</span></div>
+        Object.assign(d.style, { position: 'fixed', top: '100px', left: '700px', width: '450px', height: '610px', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
+        d.innerHTML = `<div style="padding:12px; background:#f5f5f7; border-bottom:1px solid #eee; font-size:10px; font-weight:bold; display:flex; justify-content:space-between;">EXTRACTOR <span id="close-extract" style="cursor:pointer; font-size:14px; color:#aaa;">✕</span></div>
             <div style="padding:12px; flex:1; display:flex; flex-direction:column; gap:10px;">
                 <div style="font-size:10px; color:#888;">One Model ID per line (or comma-separated).</div>
                 <textarea id="extract-ids" placeholder="3FO3EYXBY6I1&#10;3FO3G5M9IGV2&#10;..." style="width:100%; height:90px; font-family:monospace; font-size:11px; padding:8px; border:1px solid #ddd; border-radius:6px; outline:none; resize:none; box-sizing:border-box;"></textarea>
-                <button id="do-extract" style="width:100%; padding:10px; background:#0071e3; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract to CSV</button>
+                <div style="display:flex; gap:6px;">
+                    <button id="do-extract-params" style="flex:1; padding:10px; background:#0071e3; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parameters</button>
+                    <button id="do-extract-parts" style="flex:1; padding:10px; background:#1d1d1f; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parts</button>
+                </div>
                 <textarea id="extract-log" readonly style="flex:1; width:100%; font-family:monospace; font-size:10.5px; padding:10px; border:1px solid #eee; background:#fafafa; border-radius:6px; outline:none; resize:none;"></textarea>
             </div>`;
         document.body.appendChild(d);
-        const idsIn = d.querySelector('#extract-ids'); const logA = d.querySelector('#extract-log'); const goBtn = d.querySelector('#do-extract');
+        const idsIn = d.querySelector('#extract-ids'); const logA = d.querySelector('#extract-log');
+        const paramsBtn = d.querySelector('#do-extract-params'); const partsBtn = d.querySelector('#do-extract-parts');
         d.querySelector('#close-extract').onclick = () => { d.remove(); };
-        goBtn.onclick = async () => {
+
+        // Shared by both buttons — only what happens per-model (extractFn,
+        // unit label) and the download call differ.
+        async function runExtraction(btn, defaultLabel, extractFn, unitLabel, download) {
             const ids = [...new Set(idsIn.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean))];
             if (ids.length === 0) return;
-            goBtn.disabled = true; goBtn.innerText = 'Extracting...';
+            paramsBtn.disabled = true; partsBtn.disabled = true; btn.innerText = 'Extracting...';
             const tool = currentToolType();
             const allRows = []; const errors = [];
             for (let i = 0; i < ids.length; i++) {
                 const id = ids[i];
                 logA.value = `Fetching ${i + 1}/${ids.length}: ${id}...`;
                 try {
-                    const r = await fetchWithRetry(`${window.location.origin}/editor/api/site/editordata?obsbrandgoodid=${encodeURIComponent(id)}&tooltype=${tool}`, { credentials: 'include' });
-                    if (!r.ok) throw new Error(`GET failed, status ${r.status}`);
-                    const j = await r.json();
-                    if (!j.editorData) throw new Error('No editorData in response.');
-                    const rows = extractParamsFromEditorData(j.editorData, id);
+                    const ed = await fetchEditorDataFor(id, tool);
+                    const rows = extractFn(ed, id);
                     allRows.push(...rows);
-                    logA.value += ` ✅ ${rows.length} params\n`;
+                    logA.value += ` ✅ ${rows.length} ${unitLabel}\n`;
                 } catch (e) {
                     errors.push(`${id}: ${e.message || e}`);
                     logA.value += ` ❌ ${e.message || e}\n`;
                 }
             }
-            if (allRows.length > 0) {
-                downloadCsvReport(allRows, 'params_extract', PARAM_EXPORT_HEADERS, r => [
-                    r.productName, r.serial, r.paramCategory, r.grouping, r.paramType, r.dataType,
-                    r.displayName, r.paramName, r.value, r.min, r.max, r.step, r.options, r.expression,
-                    r.hideCondition, r.lockedCondition, r.imosOutputCondition, r.defaultState,
-                    r.compositeType, r.valueRelationship, r.materialRange, r.expressionType
-                ]);
-            }
-            logA.value += `\nDone. ${allRows.length} parameter(s) from ${ids.length - errors.length}/${ids.length} model(s).`;
+            if (allRows.length > 0) download(allRows);
+            logA.value += `\nDone. ${allRows.length} ${unitLabel} from ${ids.length - errors.length}/${ids.length} model(s).`;
             if (errors.length > 0) logA.value += `\n\nFailed:\n${errors.join('\n')}`;
-            goBtn.disabled = false; goBtn.innerText = 'Extract to CSV';
-        };
+            paramsBtn.disabled = false; partsBtn.disabled = false; btn.innerText = defaultLabel;
+        }
+
+        paramsBtn.onclick = () => runExtraction(paramsBtn, 'Extract Parameters', extractParamsFromEditorData, 'parameter(s)', (allRows) => {
+            downloadCsvReport(allRows, 'params_extract', PARAM_EXPORT_HEADERS, r => [
+                r.productName, r.serial, r.paramCategory, r.grouping, r.paramType, r.dataType,
+                r.displayName, r.paramName, r.value, r.min, r.max, r.step, r.options, r.expression,
+                r.hideCondition, r.lockedCondition, r.imosOutputCondition, r.defaultState,
+                r.compositeType, r.valueRelationship, r.materialRange, r.expressionType
+            ]);
+        });
+
+        partsBtn.onclick = () => runExtraction(partsBtn, 'Extract Parts', extractPartsFromEditorData, 'part(s)', (allRows) => {
+            downloadCsvReport(allRows, 'parts_extract', PART_EXPORT_HEADERS, r => [
+                r.serial, r.childSerial, r.partName, r.partRefName, r.styleParameter,
+                r.width, r.depth, r.height, r.positionX, r.positionY, r.positionZ,
+                r.rotateX, r.rotateY, r.rotateZ, r.positionMethod, r.partHideCondition,
+                r.partReplaceable, r.partQuotationRequired, r.partRemovable, r.partComponentRemovable,
+                r.partStylePack, r.partBomOutput, r.partParameterEditable,
+                r.partIgnoreInternalInterference, r.partResetAfterSuppression,
+                r.partSuppressCondition, r.customParameters
+            ]);
+        });
     }
 
     // The panel's open/close animation uses `transition: all 0.2s`, which was
