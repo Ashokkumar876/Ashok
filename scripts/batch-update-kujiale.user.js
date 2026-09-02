@@ -371,6 +371,16 @@
         return open === close;
     }
 
+    // A cell counts as a formula (skip strict numeric/boolean parsing —
+    // just check balanced parens) when it references another parameter via
+    // '#' OR another part via '@'. A bare "@Part.field" reference with no
+    // '#' anywhere (e.g. Position Z = "@BTS.H", confirmed on a real Tandem
+    // Drawer part) is completely valid and was wrongly rejected as
+    // "Numeric value or formula expected" when only '#' was checked.
+    function isFormulaLike(v) {
+        return v.includes('#') || v.includes('@');
+    }
+
     // A {"cases":[...],"defaultValue":...} Condition block with a blank
     // case value or blank defaultValue parses as valid JSON but is invalid
     // to Kujiale's server ("Invalid parameter value") — every case (and
@@ -643,7 +653,18 @@
             const names = new Set();
             row.forEach(v => {
                 const matches = String(v || '').match(/@[a-zA-Z0-9_]+/g) || [];
-                matches.forEach(m => names.add(m.slice(1)));
+                matches.forEach(m => {
+                    const name = m.slice(1);
+                    // "@self..." is Kujiale's own self-reference token — a
+                    // part referring to ITS OWN Reference name from inside
+                    // its own formula (e.g. "@selfTDMDR1" inside part
+                    // TDMDR1's own Position Y), not a reference to some
+                    // OTHER part literally named "selfTDMDR1" (which would
+                    // never exist). Always valid — skip it rather than
+                    // flagging a false "doesn't match any part" error.
+                    if (/^self/i.test(name)) return;
+                    names.add(name);
+                });
             });
             if (names.size > 0) {
                 rowRefs.push({ rowNum: i + 1, serial, rowName: cell(row, nameCol), names });
@@ -739,7 +760,7 @@
             [['w', idx.w], ['d', idx.d], ['h', idx.h]].forEach(([label, ix]) => {
                 const v = cell(row, ix);
                 if (!v) return;
-                if (v.includes('#')) {
+                if (isFormulaLike(v)) {
                     if (!checkParens(v)) addErr(rowNum, serial, '', label.toUpperCase(), `Unbalanced parentheses in formula '${v}'.`);
                 } else if (isNaN(Number(v))) {
                     addErr(rowNum, serial, '', label.toUpperCase(), `Non-numeric value '${v}'.`);
@@ -863,10 +884,10 @@
             ].forEach(([key, label]) => {
                 const v = cell(row, idx[key]);
                 if (!v) return;
-                if (v.includes('#')) {
+                if (isFormulaLike(v)) {
                     if (!checkParens(v)) addErr(rowNum, serial, partName, label, 'Unbalanced parentheses.');
                 } else if (!['true', 'false'].includes(v.toLowerCase())) {
-                    addErr(rowNum, serial, partName, label, `Must be true, false, or a formula (containing '#'), got '${v}'.`);
+                    addErr(rowNum, serial, partName, label, `Must be true, false, or a formula (containing '#' or '@'), got '${v}'.`);
                 }
             });
 
@@ -879,7 +900,7 @@
             // case here; name validity needs the imported part, so it's
             // deferred to Run.
             const positionMethod = cell(row, idx.positionMethod);
-            if (positionMethod && positionMethod.includes('#') && !checkParens(positionMethod)) {
+            if (positionMethod && isFormulaLike(positionMethod) && !checkParens(positionMethod)) {
                 addErr(rowNum, serial, partName, 'Position Method', 'Unbalanced parentheses.');
             }
 
@@ -895,7 +916,7 @@
             ].forEach(([key, label]) => {
                 const v = cell(row, idx[key]);
                 if (!v) return;
-                if (v.includes('#')) {
+                if (isFormulaLike(v)) {
                     if (!checkParens(v)) addErr(rowNum, serial, partName, label, 'Unbalanced parentheses.');
                 } else if (isNaN(Number(v))) {
                     addErr(rowNum, serial, partName, label, `Numeric value or formula expected, got '${v}'.`);
@@ -997,7 +1018,7 @@
             ].forEach(([key, label]) => {
                 const v = cell(row, idx[key]);
                 if (!v) return;
-                if (v.includes('#')) {
+                if (isFormulaLike(v)) {
                     if (!checkParens(v)) addErr(rowNum, serial, name, label, 'Unbalanced parentheses.');
                 } else if (isNaN(Number(v))) {
                     addErr(rowNum, serial, name, label, `Numeric value or formula expected, got '${v}'.`);
@@ -1006,10 +1027,10 @@
 
             const hideCondition = cell(row, idx.partHideCondition);
             if (hideCondition) {
-                if (hideCondition.includes('#')) {
+                if (isFormulaLike(hideCondition)) {
                     if (!checkParens(hideCondition)) addErr(rowNum, serial, name, 'Hide Conditions', 'Unbalanced parentheses.');
                 } else if (!['true', 'false'].includes(hideCondition.toLowerCase())) {
-                    addErr(rowNum, serial, name, 'Hide Conditions', `Must be true, false, or a formula (containing '#'), got '${hideCondition}'.`);
+                    addErr(rowNum, serial, name, 'Hide Conditions', `Must be true, false, or a formula (containing '#' or '@'), got '${hideCondition}'.`);
                 }
             }
 
@@ -1019,7 +1040,7 @@
             // compileDoorOpeningRow); pre-validation can only catch an
             // unbalanced formula here.
             const positionMethod = cell(row, idx.positionMethod);
-            if (positionMethod && positionMethod.includes('#') && !checkParens(positionMethod)) {
+            if (positionMethod && isFormulaLike(positionMethod) && !checkParens(positionMethod)) {
                 addErr(rowNum, serial, name, 'Position Method', 'Unbalanced parentheses.');
             }
 
@@ -2266,7 +2287,7 @@
     // ..." clause) on failure, so each caller can wrap it in its own
     // field/row-specific message.
     function resolveOptionNameValue(p, v, aliasMap) {
-        if (v.includes('#') || /^\d+$/.test(v)) return { value: v };
+        if (isFormulaLike(v) || /^\d+$/.test(v)) return { value: v };
         const vLower = v.toLowerCase();
         let opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === vLower);
         if (!opt && aliasMap && aliasMap[vLower]) {
