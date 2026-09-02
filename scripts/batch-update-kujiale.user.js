@@ -270,6 +270,40 @@
 
     const cell = (row, idx) => (idx !== -1 && row[idx] !== undefined) ? row[idx].trim() : '';
 
+    // Every idx.* key that getColumnIndices already resolves to a real Part
+    // Edit column. Any CSV column NOT claimed by one of these (and not
+    // blank) is a per-part Custom Parameter column instead — see
+    // dynamicPartColumns below. Keeping this as an idx-key list (rather
+    // than re-deriving header name patterns) means it can never drift out
+    // of sync with what getColumnIndices actually matches.
+    const PART_FIXED_IDX_KEYS = [
+        'serial', 'childSerial', 'partName', 'partRefName', 'styleParameter',
+        'w', 'd', 'h', 'positionX', 'positionY', 'positionZ',
+        'rotateX', 'rotateY', 'rotateZ', 'positionMethod', 'partHideCondition',
+        'partReplaceable', 'partQuotationRequired', 'partRemovable', 'partComponentRemovable',
+        'partStylePack', 'partBomOutput', 'partParameterEditable', 'partIgnoreInternalInterference',
+        'partResetAfterSuppression', 'partSuppressCondition', 'customParameters'
+    ];
+
+    // Part Edit's wide-format Custom Parameters: every column the user adds
+    // beyond the fixed set above is one part parameter, keyed by its own
+    // column header (e.g. "CB", "CZ") — the header is matched against each
+    // part's simpleName first, falling back to paramName, in
+    // compilePartEditRow. Computed once per import off the header row
+    // (rows[0]) rather than threading a separate headers param everywhere.
+    function dynamicPartColumns(rows, idx) {
+        const headers = rows[0] || [];
+        const claimed = new Set(PART_FIXED_IDX_KEYS.map(k => idx[k]).filter(i => i !== -1 && i !== undefined));
+        const cols = [];
+        headers.forEach((h, i) => {
+            if (claimed.has(i)) return;
+            const header = String(h || '').trim();
+            if (!header) return;
+            cols.push({ header, index: i });
+        });
+        return cols;
+    }
+
     // Parameter type -> allowed Data types (derived from the verified schema table).
     const TYPE_MATRIX = {
         // Unlimited IS allowed for Float/Integer, not just Text — confirmed
@@ -706,6 +740,7 @@
     function validatePartEditRows(rows, idx) {
         const seenPerModel = new Map();
         const seenRefNamePerModel = new Map();
+        const dynCols = dynamicPartColumns(rows, idx);
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -876,6 +911,29 @@
                     addErr(rowNum, serial, partName, 'Custom Parameters', `Not a valid JSON array of {"paramName":...,"value":...}: ${e.message}`);
                 }
             }
+
+            // Wide-format Custom Parameters — one column per part
+            // parameter (header = simpleName or paramName, e.g. "CB",
+            // "CZ"). Whether the header actually matches a real parameter
+            // on the imported part can only be checked at Run time; this
+            // only validates a Condition-JSON cell's shape, same as the
+            // legacy JSON-array column above.
+            dynCols.forEach(({ header, index }) => {
+                const v = row[index] !== undefined ? row[index].trim() : '';
+                if (!v || !v.startsWith('{') || !v.includes('"cases"')) return;
+                try {
+                    const condParsed = JSON.parse(v);
+                    if (!condParsed || !Array.isArray(condParsed.cases) || condParsed.defaultValue === undefined) {
+                        throw new Error('expected {"cases":[...],"defaultValue":...}');
+                    }
+                    const blanks = findBlankConditionCases(condParsed);
+                    if (blanks.length > 0) {
+                        addErr(rowNum, serial, partName, header, `'${header}' has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real value, not blank.`);
+                    }
+                } catch (e) {
+                    addErr(rowNum, serial, partName, header, `'${header}' looks like JSON but isn't a valid {"cases":[...],"defaultValue":...} block: ${e.message}`);
+                }
+            });
         }
     }
 
@@ -1124,6 +1182,7 @@
         lastDeleteSkippedProtected = [];
         deleteResetValues = new Map();
         deleteProtectedNamesPerModel = new Map();
+        const partDynCols = taskId === 'PART_EDIT' ? dynamicPartColumns(rows, idx) : [];
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
             const rowNum = i + 1;
@@ -1189,6 +1248,9 @@
             }
 
             if (taskId === 'PART_EDIT') {
+                const customParamEntries = partDynCols
+                    .map(({ header, index }) => ({ paramName: header, value: row[index] !== undefined ? row[index].trim() : '' }))
+                    .filter(e => e.value !== '');
                 map.get(serial).push({
                     childSerial: cell(row, idx.childSerial),
                     partName: cell(row, idx.partName),
@@ -1215,7 +1277,8 @@
                     partIgnoreInternalInterference: cell(row, idx.partIgnoreInternalInterference),
                     partResetAfterSuppression: cell(row, idx.partResetAfterSuppression),
                     partSuppressCondition: cell(row, idx.partSuppressCondition),
-                    customParameters: cell(row, idx.customParameters)
+                    customParameters: cell(row, idx.customParameters),
+                    customParamEntries
                 });
                 continue;
             }
@@ -1841,15 +1904,21 @@
     // compilePartEditRow's own field mapping one-for-one (W/D/H, position,
     // rotationDegree, invokedPosType, the Design Attribute flags, modelPackage,
     // and everything else as a Custom Parameters entry).
+    // Style Parameter is intentionally left out here — it's an
+    // instance-delegation flag (functionName), not a part parameter, and
+    // per user request isn't part of this sheet. Custom Parameters is also
+    // left out of this fixed list: each custom parameter gets its own
+    // dynamic column instead (header = simpleName or paramName, e.g.
+    // "CB"/"CZ") — see the partsBtn handler in openExtractor, which appends
+    // those columns after this fixed set.
     const PART_EXPORT_HEADERS = [
         'Product serial number', 'Child Serial Number', 'Part Name', 'Reference name',
-        'Style Parameter', 'Width', 'Depth', 'Height',
+        'Width', 'Depth', 'Height',
         'Position X', 'Position Y', 'Position Z', 'Rotate X', 'Rotate Y', 'Rotate Z',
         'Position Method', 'Hide Conditions', 'Replaceable', 'Quotation Required',
         'Removable', 'Component Removable', 'Style Pack', 'BOM Output',
         'Parameter Editable', 'Ignore Internal Interference',
-        'Reset the part after the suppression is released', 'Suppress condition',
-        'Custom Parameters'
+        'Reset the part after the suppression is released', 'Suppress condition'
     ];
 
     // Every part-level paramName that already has its own dedicated column
@@ -1908,17 +1977,26 @@
             };
             const modelPackageP = findPartParam(instance, 'modelPackage');
 
-            const customEntries = (instance.parameters || [])
+            // Wide format: one key per custom parameter, keyed by the same
+            // friendlier alias the model editor itself shows (simpleName,
+            // e.g. "CZ" for materialBrandGoodId) when the part has one,
+            // falling back to the raw internal paramName (e.g. "CB")
+            // otherwise — matches compilePartEditRow's lookup exactly, so
+            // download and upload use the same column names.
+            const customParams = {};
+            (instance.parameters || [])
                 .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName))
-                .map(p => ({ paramName: p.paramName, value: decodePartCustomParamValue(p) }))
-                .filter(e => e.value !== undefined);
+                .forEach(p => {
+                    const val = decodePartCustomParamValue(p);
+                    if (val === undefined) return;
+                    customParams[p.simpleName || p.paramName] = val;
+                });
 
             return {
                 serial: modelId,
                 childSerial: instance.obsBrandGoodId || '',
                 partName: instance.name || '',
                 partRefName: instance.refName || '',
-                styleParameter: instance.functionName || '',
                 width: dim('W'), depth: dim('D'), height: dim('H'),
                 positionX: pos.x, positionY: pos.y, positionZ: pos.z,
                 rotateX: rot.x, rotateY: rot.y, rotateZ: rot.z,
@@ -1934,7 +2012,7 @@
                 partIgnoreInternalInterference: flag('ignoreInnerIntersect'),
                 partResetAfterSuppression: flag('resetWhenSuppress'),
                 partSuppressCondition: flag('KJL_model_suppress_param'),
-                customParameters: customEntries.length ? JSON.stringify(customEntries) : ''
+                customParams
             };
         });
     }
@@ -2204,17 +2282,33 @@
         // Non-asset custom parameters (plain float/int/string/etc.) just
         // get the value passed through, same as the Design Attribute
         // fields above.
+        // Two sources feed the same entry list: the wide per-column format
+        // (row.customParamEntries, one entry per non-fixed CSV column —
+        // this is what extractPartsFromEditorData now exports) and the
+        // legacy single JSON-array column (row.customParameters), kept for
+        // backward compatibility with older exported CSVs. Both are merged
+        // so a hand-edited row mixing the two still works.
+        let entries = (row.customParamEntries || []).slice();
         if (row.customParameters) {
-            let entries;
+            let legacyEntries;
             try {
-                entries = JSON.parse(row.customParameters);
-                if (!Array.isArray(entries)) throw new Error('expected a JSON array');
+                legacyEntries = JSON.parse(row.customParameters);
+                if (!Array.isArray(legacyEntries)) throw new Error('expected a JSON array');
             } catch (e) {
                 return `Custom Parameters is not a valid JSON array for part '${row.partName}': ${e.message}`;
             }
+            entries = entries.concat(legacyEntries);
+        }
+        if (entries.length > 0) {
             for (const entry of entries) {
                 if (!entry || !entry.paramName) return `Custom Parameters entry missing "paramName" for part '${row.partName}'.`;
-                const p = (instance.parameters || []).find(x => x.paramName === entry.paramName);
+                // Column header (or legacy JSON paramName) is matched
+                // against the part's own simpleName first — that's the
+                // friendlier alias shown/exported as the column header
+                // (e.g. "CZ" for materialBrandGoodId) — falling back to
+                // the raw internal paramName for parts/entries that don't
+                // have one.
+                const p = (instance.parameters || []).find(x => x.simpleName === entry.paramName || x.paramName === entry.paramName);
                 if (!p) return `Custom parameter '${entry.paramName}' not found on part '${row.partName}'.`;
                 const val = entry.value !== undefined && entry.value !== null ? String(entry.value) : '';
                 if (['material', 'style', 'contour'].includes(p.valueType)) {
@@ -2802,14 +2896,21 @@
         });
 
         partsBtn.onclick = () => runExtraction(partsBtn, 'Extract Parts', extractPartsFromEditorData, 'part(s)', (allRows) => {
-            downloadCsvReport(allRows, 'parts_extract', PART_EXPORT_HEADERS, r => [
-                r.serial, r.childSerial, r.partName, r.partRefName, r.styleParameter,
+            // Custom Parameters columns are dynamic — the union of every
+            // key (simpleName or paramName) seen across all extracted
+            // parts, sorted for a stable/predictable column order, appended
+            // after the fixed columns.
+            const customKeys = [...new Set(allRows.flatMap(r => Object.keys(r.customParams || {})))].sort();
+            const headers = [...PART_EXPORT_HEADERS, ...customKeys];
+            downloadCsvReport(allRows, 'parts_extract', headers, r => [
+                r.serial, r.childSerial, r.partName, r.partRefName,
                 r.width, r.depth, r.height, r.positionX, r.positionY, r.positionZ,
                 r.rotateX, r.rotateY, r.rotateZ, r.positionMethod, r.partHideCondition,
                 r.partReplaceable, r.partQuotationRequired, r.partRemovable, r.partComponentRemovable,
                 r.partStylePack, r.partBomOutput, r.partParameterEditable,
                 r.partIgnoreInternalInterference, r.partResetAfterSuppression,
-                r.partSuppressCondition, r.customParameters
+                r.partSuppressCondition,
+                ...customKeys.map(k => r.customParams && r.customParams[k] !== undefined ? r.customParams[k] : '')
             ]);
         });
     }
