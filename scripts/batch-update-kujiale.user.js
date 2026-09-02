@@ -1949,12 +1949,26 @@
     // use (confirmed against a real sample: bare ids in every case, never
     // JSON) and so a re-import doesn't have to special-case already-wrapped
     // input.
+    // Style values are stored as {"obsBrandGoodId":...,"versionId":...} —
+    // the versionId is REAL and load-bearing (confirmed the hard way: a
+    // real re-import round-tripped several Style params — SH1/SH2's
+    // FGPS/GPS/HNS, SKC's SKF/LEGS — through an earlier version of this
+    // function that collapsed the value down to just the bare id, and
+    // Utils.wrapAssetValue's own bare-id path always defaults versionId to
+    // 0 on the way back in; that silently downgraded every one of those
+    // parts' actual versionId (4, 2, 3, 5, 25, ...) to 0 even though the
+    // user never touched those cells, and was the real cause of a
+    // "Server validation failed: 属性错误" rejection). Kept as the full
+    // JSON instead — Utils.wrapAssetValue already passes a JSON value
+    // through unchanged on import, so an untouched cell round-trips
+    // exactly; a user who deliberately types a bare id still gets that
+    // sensible versionId:0 default for a genuinely NEW value.
     function unwrapAssetVal(v) {
         if (v === null || v === undefined || v === '') return '';
         const s = String(v).trim();
         if (s.startsWith('#') || s.startsWith('@')) return s;
         if (s.startsWith('{')) {
-            try { const o = JSON.parse(s); if (o && o.obsBrandGoodId) return o.obsBrandGoodId; } catch (e) { /* not JSON after all — fall through */ }
+            try { const o = JSON.parse(s); if (o && o.obsBrandGoodId) return s; } catch (e) { /* not JSON after all — fall through */ }
         }
         return s;
     }
