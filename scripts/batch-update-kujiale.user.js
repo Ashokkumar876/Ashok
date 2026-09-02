@@ -443,7 +443,7 @@
     const extractBtn = document.createElement('button');
     extractBtn.id = 'extract-params-btn';
     extractBtn.style.cssText = 'width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1px solid #0071e3; color:#0071e3; background:#fff; font-size:11px; cursor:pointer; font-weight:bold;';
-    extractBtn.innerText = '📤 Extract Parameters to Sheet';
+    extractBtn.innerText = '📤 Extract Parameters / Parts to Sheet';
     extractBtn.onclick = () => { openExtractor(); };
     body.appendChild(extractBtn);
 
@@ -2706,7 +2706,7 @@
     function openDebugger() {
         const existing = document.getElementById('debug-modal'); if (existing) return;
         const d = document.createElement('div'); d.id = 'debug-modal';
-        Object.assign(d.style, { position: 'fixed', top: '100px', left: '700px', width: '450px', height: '550px', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
+        Object.assign(d.style, { position: 'fixed', top: '60px', left: '50%', transform: 'translateX(-50%)', width: '450px', maxWidth: 'calc(100vw - 40px)', height: '550px', maxHeight: 'calc(100vh - 100px)', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
         d.innerHTML = `<div style="padding:12px; background:#f5f5f7; border-bottom:1px solid #eee; font-size:10px; font-weight:bold; display:flex; justify-content:space-between;">JSON EXTRACTOR <span id="close-debug" style="cursor:pointer; font-size:14px; color:#aaa;">✕</span></div>
             <div style="padding:12px; flex:1; display:flex; flex-direction:column; gap:10px;">
                 <div style="display:flex; gap:6px;"><input id="debug-id" placeholder="Enter ID..." style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:11px; outline:none;"><button id="do-clear" style="padding:0 12px; background:#f0f0f2; border:none; border-radius:6px; font-size:11px; cursor:pointer;">Clear</button></div>
@@ -2746,7 +2746,10 @@
     function openExtractor() {
         const existing = document.getElementById('extract-modal'); if (existing) return;
         const d = document.createElement('div'); d.id = 'extract-modal';
-        Object.assign(d.style, { position: 'fixed', top: '100px', left: '700px', width: '450px', height: '610px', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
+        // Centered via left:50%/translateX rather than a fixed left offset —
+        // a hardcoded left:700px could land off-screen on a narrower window
+        // (confirmed: this is why the modal wasn't appearing to click).
+        Object.assign(d.style, { position: 'fixed', top: '60px', left: '50%', transform: 'translateX(-50%)', width: '450px', maxWidth: 'calc(100vw - 40px)', height: '610px', maxHeight: 'calc(100vh - 100px)', background: '#fff', zIndex: '100001', borderRadius: '12px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', border: '1px solid #ddd', overflow: 'hidden' });
         d.innerHTML = `<div style="padding:12px; background:#f5f5f7; border-bottom:1px solid #eee; font-size:10px; font-weight:bold; display:flex; justify-content:space-between;">EXTRACTOR <span id="close-extract" style="cursor:pointer; font-size:14px; color:#aaa;">✕</span></div>
             <div style="padding:12px; flex:1; display:flex; flex-direction:column; gap:10px;">
                 <div style="font-size:10px; color:#888;">One Model ID per line (or comma-separated).</div>
