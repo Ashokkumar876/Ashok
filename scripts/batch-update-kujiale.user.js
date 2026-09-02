@@ -408,18 +408,6 @@
         return blanks;
     }
 
-    // A {"x":...,"y":...} (or {"x":...,"y":...,"z":...}) float2/float3
-    // value with a blank x, y, or z sub-field parses as perfectly valid
-    // JSON but silently fails Kujiale's own server-side validation
-    // ("属性错误") when written back — confirmed on a real run: several
-    // parts' CZCC (Texture Size) all carried "{"x":"","y":""}" verbatim
-    // from extraction (their genuinely-unset default), and re-importing
-    // it unedited triggered a generic property-error rejection. Returns
-    // the blank axis names, or [] if none.
-    function findBlankFloat2(parsed) {
-        return ['x', 'y', 'z'].filter(k => k in parsed && String(parsed[k]).trim() === '');
-    }
-
     // =========================================================================
     // SECTION 3: UI CONSTRUCTION (frozen layout)
     // =========================================================================
@@ -981,8 +969,7 @@
                     });
                     parsed.forEach(entry => {
                         const v = entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
-                        if (!v.startsWith('{')) return;
-                        if (v.includes('"cases"')) {
+                        if (v.startsWith('{') && v.includes('"cases"')) {
                             try {
                                 const condParsed = JSON.parse(v);
                                 if (condParsed && Array.isArray(condParsed.cases) && condParsed.defaultValue !== undefined) {
@@ -992,17 +979,7 @@
                                     }
                                 }
                             } catch (e) { /* malformed JSON here is reported at Run time against the real part */ }
-                            return;
                         }
-                        try {
-                            const objParsed = JSON.parse(v);
-                            if (objParsed && typeof objParsed === 'object' && !Array.isArray(objParsed)) {
-                                const blanks = findBlankFloat2(objParsed);
-                                if (blanks.length > 0) {
-                                    addErr(rowNum, serial, partName, 'Custom Parameters', `'${entry.paramName}' has a blank ${blanks.join('/')} value ('${v}') — needs a real number, or leave the whole cell blank to skip it (don't leave an empty string inside the JSON).`);
-                                }
-                            }
-                        } catch (e) { /* not JSON after all — plain value, nothing to check here */ }
                     });
                 } catch (e) {
                     addErr(rowNum, serial, partName, 'Custom Parameters', `Not a valid JSON array of {"paramName":...,"value":...}: ${e.message}`);
@@ -1013,39 +990,23 @@
             // parameter (header = simpleName or paramName, e.g. "CB",
             // "CZ"). Whether the header actually matches a real parameter
             // on the imported part can only be checked at Run time; this
-            // validates a Condition-JSON cell's shape (same as the legacy
-            // JSON-array column above) and flags a blank float2/float3
-            // sub-field (see findBlankFloat2) — a shape Kujiale's own
-            // extraction can produce verbatim (e.g. Texture Size /
-            // "CZCC" = {"x":"","y":""}) that round-trips fine as JSON but
-            // gets rejected by the server on save.
+            // only validates a Condition-JSON cell's shape, same as the
+            // legacy JSON-array column above.
             dynCols.forEach(({ header, index }) => {
                 const v = row[index] !== undefined ? row[index].trim() : '';
-                if (!v || !v.startsWith('{')) return;
-                if (v.includes('"cases"')) {
-                    try {
-                        const condParsed = JSON.parse(v);
-                        if (!condParsed || !Array.isArray(condParsed.cases) || condParsed.defaultValue === undefined) {
-                            throw new Error('expected {"cases":[...],"defaultValue":...}');
-                        }
-                        const blanks = findBlankConditionCases(condParsed);
-                        if (blanks.length > 0) {
-                            addErr(rowNum, serial, partName, header, `'${header}' has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real value, not blank.`);
-                        }
-                    } catch (e) {
-                        addErr(rowNum, serial, partName, header, `'${header}' looks like JSON but isn't a valid {"cases":[...],"defaultValue":...} block: ${e.message}`);
-                    }
-                    return;
-                }
+                if (!v || !v.startsWith('{') || !v.includes('"cases"')) return;
                 try {
-                    const objParsed = JSON.parse(v);
-                    if (objParsed && typeof objParsed === 'object' && !Array.isArray(objParsed)) {
-                        const blanks = findBlankFloat2(objParsed);
-                        if (blanks.length > 0) {
-                            addErr(rowNum, serial, partName, header, `'${header}' has a blank ${blanks.join('/')} value ('${v}') — needs a real number, or leave the whole cell blank to skip it (don't leave an empty string inside the JSON).`);
-                        }
+                    const condParsed = JSON.parse(v);
+                    if (!condParsed || !Array.isArray(condParsed.cases) || condParsed.defaultValue === undefined) {
+                        throw new Error('expected {"cases":[...],"defaultValue":...}');
                     }
-                } catch (e) { /* not JSON after all — plain value, nothing to check here */ }
+                    const blanks = findBlankConditionCases(condParsed);
+                    if (blanks.length > 0) {
+                        addErr(rowNum, serial, partName, header, `'${header}' has a blank value for ${blanks.join(', ')} — every case (and defaultValue) needs a real value, not blank.`);
+                    }
+                } catch (e) {
+                    addErr(rowNum, serial, partName, header, `'${header}' looks like JSON but isn't a valid {"cases":[...],"defaultValue":...} block: ${e.message}`);
+                }
             });
         }
     }
