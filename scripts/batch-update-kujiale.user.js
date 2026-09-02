@@ -311,8 +311,15 @@
         const cols = [];
         headers.forEach((h, i) => {
             if (claimed.has(i)) return;
-            const header = String(h || '').trim();
-            if (!header) return;
+            const raw = String(h || '').trim();
+            if (!raw) return;
+            // A custom-parameter header can be two lines — "Material\nCZ",
+            // Extract Parts' displayName-then-code format for legibility.
+            // Only the LAST line is the real column key matched against
+            // each part's simpleName/paramName; a plain single-line header
+            // (no displayName prefix, or hand-typed) passes through as-is.
+            const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+            const header = lines.length > 0 ? lines[lines.length - 1] : raw;
             cols.push({ header, index: i });
         });
         return cols;
@@ -516,7 +523,13 @@
 
     function downloadCsvReport(items, filenamePrefix, headerRow, rowMapper) {
         if (!items || items.length === 0) return;
-        let csv = "﻿" + headerRow.join(',') + "\n";
+        // Quoted the same as every data cell (not just joined raw) — a
+        // header can itself contain a comma or an embedded newline (Extract
+        // Parts' two-line "DisplayName\ncode" custom-parameter headers),
+        // and only a quoted field survives that intact through RFC4180
+        // parsing/Excel instead of corrupting the row.
+        const headerVals = headerRow.map(h => `"${String(h == null ? '' : h).replace(/"/g, '""')}"`);
+        let csv = "﻿" + headerVals.join(',') + "\n";
         items.forEach(item => {
             const vals = rowMapper(item).map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`);
             csv += vals.join(',') + "\n";
@@ -2056,6 +2069,13 @@
         return (instance.parameters || []).find(p => p.paramName === paramName);
     }
 
+    // Matches the Link Parameters group a part's own customParamGroups[]
+    // can carry (seen as "Link Parameters", "Link Parameter", and "IMOS
+    // System Link Parameters" across real samples) — whichever keys that
+    // group lists are pulled to the front of the Custom Parameters columns
+    // on export, right after Suppress condition, per user request.
+    const LINK_GROUP_NAME_RE = /^(imos system )?link parameters?$/i;
+
     function decodeFloat3(raw) {
         if (!raw) return { x: '', y: '', z: '' };
         try {
@@ -2103,13 +2123,26 @@
             // otherwise — matches compilePartEditRow's lookup exactly, so
             // download and upload use the same column names.
             const customParams = {};
+            // The keyword alone (e.g. "CZ") is hard to identify — this
+            // carries each key's own displayName (e.g. "Material") so the
+            // partsBtn handler can build a "DisplayName\nCODE" column
+            // header. Values only, not part of what's uploaded back.
+            const customParamDisplayNames = {};
             (instance.parameters || [])
                 .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName) && !PART_RESERVED_PARAM_NAMES.has(p.simpleName))
                 .forEach(p => {
                     const val = decodePartCustomParamValue(p);
                     if (val === undefined) return;
-                    customParams[p.simpleName || p.paramName] = val;
+                    const key = p.simpleName || p.paramName;
+                    customParams[key] = val;
+                    if (p.displayName) customParamDisplayNames[key] = p.displayName;
                 });
+
+            // Which of the above keys this part's own customParamGroups[]
+            // files under a Link Parameters group — see LINK_GROUP_NAME_RE.
+            const linkGroupKeys = (instance.customParamGroups || [])
+                .filter(g => LINK_GROUP_NAME_RE.test(String(g.groupName || '').trim()))
+                .flatMap(g => g.paramNames || []);
 
             return {
                 serial: modelId,
@@ -2131,7 +2164,9 @@
                 partIgnoreInternalInterference: flag('ignoreInnerIntersect'),
                 partResetAfterSuppression: flag('resetWhenSuppress'),
                 partSuppressCondition: flag('KJL_model_suppress_param'),
-                customParams
+                customParams,
+                customParamDisplayNames,
+                linkGroupKeys
             };
         });
     }
@@ -3152,10 +3187,37 @@
         partsBtn.onclick = () => runExtraction(partsBtn, 'Extract Parts', extractPartsFromEditorData, 'part(s)', (allRows) => {
             // Custom Parameters columns are dynamic — the union of every
             // key (simpleName or paramName) seen across all extracted
-            // parts, sorted for a stable/predictable column order, appended
-            // after the fixed columns.
-            const customKeys = [...new Set(allRows.flatMap(r => Object.keys(r.customParams || {})))].sort();
-            const headers = [...PART_EXPORT_HEADERS, ...customKeys];
+            // parts. Whichever keys any part's own Link Parameters group
+            // (see LINK_GROUP_NAME_RE) lists come first, right after
+            // Suppress condition, matching the model editor's own grouping;
+            // everything else follows. Alphabetical within each bucket for
+            // a stable, predictable order.
+            const allKeys = new Set(allRows.flatMap(r => Object.keys(r.customParams || {})));
+            const linkGroupKeySet = new Set(allRows.flatMap(r => r.linkGroupKeys || []));
+            const priorityKeys = [...allKeys].filter(k => linkGroupKeySet.has(k)).sort();
+            const restKeys = [...allKeys].filter(k => !linkGroupKeySet.has(k)).sort();
+            const customKeys = [...priorityKeys, ...restKeys];
+
+            // The code alone (e.g. "CZ") is hard to identify — each custom
+            // column's header is "DisplayName\nCODE" when a displayName is
+            // known (e.g. "Material\nCZ", rendered by Excel as a wrapped
+            // two-line header cell) so it's still recognizable at a glance;
+            // the CODE line is what actually gets matched back on import
+            // (see dynamicPartColumns), so re-uploading this exact sheet
+            // still works. Falls back to just the code when no part
+            // reported a displayName for it.
+            const displayNameByKey = {};
+            allRows.forEach(r => {
+                Object.entries(r.customParamDisplayNames || {}).forEach(([k, d]) => {
+                    if (d && !displayNameByKey[k]) displayNameByKey[k] = d;
+                });
+            });
+            const customHeaders = customKeys.map(k => {
+                const d = displayNameByKey[k];
+                return (d && d !== k) ? `${d}\n${k}` : k;
+            });
+
+            const headers = [...PART_EXPORT_HEADERS, ...customHeaders];
             downloadCsvReport(allRows, 'parts_extract', headers, r => [
                 r.serial, r.childSerial, r.partName, r.partRefName,
                 r.width, r.depth, r.height, r.positionX, r.positionY, r.positionZ,
