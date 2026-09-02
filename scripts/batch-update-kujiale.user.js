@@ -42,7 +42,13 @@
         PART_EDIT: { id: 'PART_EDIT', label: 'Add / Edit Parts', color: THEME.success, icon: '🧩', implemented: true },
         // Matches the part to delete by Reference name (row.partRefName) —
         // same identifier PART_EDIT uses to match an existing part.
-        PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: true }
+        PART_DEL: { id: 'PART_DEL', label: 'Delete Parts', color: THEME.warning, icon: '🗑', implemented: true },
+        // Edit-only — matched by exact Name (e.g. "Door Opening-1") against
+        // editorData.customDoorHoles. Unlike Parts, a Door Opening isn't a
+        // catalog item fetched from a library — it's a virtual hole the
+        // cabinet/wardrobe frame generates on its own, so there's no "Add"
+        // path here, only editing one that's already on the model.
+        DOOR_OPENING_EDIT: { id: 'DOOR_OPENING_EDIT', label: 'Edit Door Openings', color: THEME.indigo, icon: '🚪', implemented: true }
     };
 
     let currentTask = null;
@@ -264,7 +270,15 @@
             // JSON array of {"paramName":...,"value":...} for the child
             // part's own custom parameters (Material/CZ, VGF, or any other
             // paramName that part actually has).
-            customParameters: findCol(n, 'customparameters', 'customparameter')
+            customParameters: findCol(n, 'customparameters', 'customparameter'),
+            // Door Openings (DOOR_OPENING_EDIT) columns. Width/Height,
+            // Position X/Y/Z, Rotate X/Y/Z, Position Method, and "Hide
+            // Conditions" reuse the exact same idx keys as Parts above
+            // (w/h/positionX../partHideCondition) — same header names, same
+            // underlying convention, and never both present in one CSV.
+            doorOpeningName: findCol(n, 'dooropeningname'),
+            doorOpeningType: findCol(n, 'dooropeningtype'),
+            doorOpeningAdaptationUnit: findCol(n, 'minimumviableunit', 'adaptationunit')
         };
     }
 
@@ -432,6 +446,7 @@
     body.appendChild(createBtnGroup('Quotation Settings', ['QUOTE']));
     body.appendChild(createBtnGroup('Parameters', ['PARAM_EDIT', 'PARAM_DEL']));
     body.appendChild(createBtnGroup('Parts', ['PART_EDIT', 'PART_DEL']));
+    body.appendChild(createBtnGroup('Door Openings', ['DOOR_OPENING_EDIT']));
 
     const panel = document.createElement('div');
     panel.style.cssText = 'padding:10px; background:#f9f9fb; border-radius:8px; border:1px solid #eee;';
@@ -542,6 +557,8 @@
                 validatePartEditHeaders(idx);
             } else if (currentTask.id === 'PART_DEL') {
                 validatePartDelHeaders(idx);
+            } else if (currentTask.id === 'DOOR_OPENING_EDIT') {
+                validateDoorOpeningHeaders(idx);
             }
 
             // Header errors (missing required COLUMN) block everything —
@@ -556,6 +573,7 @@
                 else if (currentTask.id === 'PARAM_DEL') validateParamDelRows(rows, idx);
                 else if (currentTask.id === 'PART_EDIT') validatePartEditRows(rows, idx);
                 else if (currentTask.id === 'PART_DEL') validatePartDelRows(rows, idx);
+                else if (currentTask.id === 'DOOR_OPENING_EDIT') validateDoorOpeningRows(rows, idx);
             }
 
             if (headerErrorCount > 0) {
@@ -574,7 +592,7 @@
             // "#XYZ" check but for real server state instead of just the
             // CSV's own contents (only possible here since this path can
             // make network calls; CSV-only pre-validation can't).
-            if (currentTask.id === 'PARAM_EDIT' || currentTask.id === 'PART_EDIT') {
+            if (currentTask.id === 'PARAM_EDIT' || currentTask.id === 'PART_EDIT' || currentTask.id === 'DOOR_OPENING_EDIT') {
                 document.getElementById('log-text').value = `Checking part references...`;
                 await checkAtReferences(rows, idx);
             }
@@ -614,8 +632,8 @@
     async function checkAtReferences(rows, idx) {
         // Whichever of these columns exists identifies "this row" in the
         // error report — Parameter Name for a Parameter CSV, Part Name for
-        // a Parts CSV.
-        const nameCol = idx.paramName !== -1 ? idx.paramName : idx.partName;
+        // a Parts CSV, Door Opening Name for a Door Openings CSV.
+        const nameCol = idx.paramName !== -1 ? idx.paramName : (idx.partName !== -1 ? idx.partName : idx.doorOpeningName);
         const rowRefs = []; // {rowNum, serial, rowName, names: Set}
         const serials = new Set();
         for (let i = 1; i < rows.length; i++) {
@@ -703,6 +721,10 @@
         if (idx.childSerial === -1 && idx.partName === -1 && idx.partRefName === -1) {
             addErr('Header', '', '', 'Child Serial Number / Part Name / Reference name', "At least one of 'Child Serial Number', 'Part Name', or 'Reference name' columns is required.");
         }
+    }
+    function validateDoorOpeningHeaders(idx) {
+        if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
+        if (idx.doorOpeningName === -1) addErr('Header', '', '', 'Door Opening Name', "Missing required column 'Door Opening Name'.");
     }
 
     function validateQuoteRows(rows, idx) {
@@ -951,6 +973,59 @@
             // fallback for parts that were never given a Reference name.
             if (!childSerial && !partName && !partRefName) {
                 addErr(rowNum, serial, '', 'Child Serial Number / Part Name / Reference name', 'At least one of Child Serial Number, Part Name, or Reference name is required to identify which part to delete.');
+            }
+        }
+    }
+
+    function validateDoorOpeningRows(rows, idx) {
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
+            const rowNum = i + 1;
+            const serial = cell(row, idx.serial);
+            const name = cell(row, idx.doorOpeningName);
+            if (!serial) addErr(rowNum, 'Empty', name, 'Product serial number', 'Model serial ID is empty.');
+            if (!name) {
+                addErr(rowNum, serial, '', 'Door Opening Name', 'Door Opening Name is required — must exactly match an existing Door Opening on the model (e.g. "Door Opening-1"). This sheet edits existing Door Openings only, it can\'t create new ones.');
+            }
+
+            // Width/Height and Position/Rotate X/Y/Z — numeric, or a formula
+            // (same convention as Parts' own W/D/H and Position/Rotate).
+            [
+                ['w', 'Width'], ['h', 'Height'],
+                ['positionX', 'Position X'], ['positionY', 'Position Y'], ['positionZ', 'Position Z'],
+                ['rotateX', 'Rotate X'], ['rotateY', 'Rotate Y'], ['rotateZ', 'Rotate Z']
+            ].forEach(([key, label]) => {
+                const v = cell(row, idx[key]);
+                if (!v) return;
+                if (v.includes('#')) {
+                    if (!checkParens(v)) addErr(rowNum, serial, name, label, 'Unbalanced parentheses.');
+                } else if (isNaN(Number(v))) {
+                    addErr(rowNum, serial, name, label, `Numeric value or formula expected, got '${v}'.`);
+                }
+            });
+
+            const hideCondition = cell(row, idx.partHideCondition);
+            if (hideCondition) {
+                if (hideCondition.includes('#')) {
+                    if (!checkParens(hideCondition)) addErr(rowNum, serial, name, 'Hide Conditions', 'Unbalanced parentheses.');
+                } else if (!['true', 'false'].includes(hideCondition.toLowerCase())) {
+                    addErr(rowNum, serial, name, 'Hide Conditions', `Must be true, false, or a formula (containing '#'), got '${hideCondition}'.`);
+                }
+            }
+
+            // Position Method / Door Opening Type — whichever option NAME
+            // (or raw enum value) was typed is only resolved against the
+            // real Door Opening's own editorOptions at Run time (see
+            // compileDoorOpeningRow); pre-validation can only catch an
+            // unbalanced formula here.
+            const positionMethod = cell(row, idx.positionMethod);
+            if (positionMethod && positionMethod.includes('#') && !checkParens(positionMethod)) {
+                addErr(rowNum, serial, name, 'Position Method', 'Unbalanced parentheses.');
+            }
+
+            const adaptationUnit = cell(row, idx.doorOpeningAdaptationUnit);
+            if (adaptationUnit && !['true', 'false'].includes(adaptationUnit.toLowerCase())) {
+                addErr(rowNum, serial, name, 'Minimum viable unit', `Must be true or false, got '${adaptationUnit}'.`);
             }
         }
     }
@@ -1279,6 +1354,25 @@
                     partSuppressCondition: cell(row, idx.partSuppressCondition),
                     customParameters: cell(row, idx.customParameters),
                     customParamEntries
+                });
+                continue;
+            }
+
+            if (taskId === 'DOOR_OPENING_EDIT') {
+                map.get(serial).push({
+                    name: cell(row, idx.doorOpeningName),
+                    width: cell(row, idx.w),
+                    height: cell(row, idx.h),
+                    positionX: cell(row, idx.positionX),
+                    positionY: cell(row, idx.positionY),
+                    positionZ: cell(row, idx.positionZ),
+                    rotateX: cell(row, idx.rotateX),
+                    rotateY: cell(row, idx.rotateY),
+                    rotateZ: cell(row, idx.rotateZ),
+                    hideCondition: cell(row, idx.partHideCondition),
+                    positionMethod: cell(row, idx.positionMethod),
+                    doorOpeningType: cell(row, idx.doorOpeningType),
+                    adaptationUnit: cell(row, idx.doorOpeningAdaptationUnit)
                 });
                 continue;
             }
@@ -1930,7 +2024,11 @@
         'W', 'D', 'H', 'position', 'rotationDegree', 'invokedPosType', 'ignore',
         'replaceable', 'needQuotation', 'isDeletable', 'cascadeDelete', 'modelPackage',
         'displayInCostList', 'paramOverride', 'ignoreInnerIntersect', 'resetWhenSuppress',
-        'KJL_model_suppress_param', 'instanceOverride', 'invokedPos', 'offset'
+        'KJL_model_suppress_param', 'instanceOverride', 'invokedPos', 'offset',
+        // Internal rule-reference field (holds JSON like {"ruleId":"..."})
+        // rather than an editable value — not useful as a CSV column, left
+        // out per user request.
+        'fit'
     ]);
 
     function findPartParam(instance, paramName) {
@@ -1985,7 +2083,7 @@
             // download and upload use the same column names.
             const customParams = {};
             (instance.parameters || [])
-                .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName))
+                .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName) && !PART_RESERVED_PARAM_NAMES.has(p.simpleName))
                 .forEach(p => {
                     const val = decodePartCustomParamValue(p);
                     if (val === undefined) return;
@@ -2013,6 +2111,44 @@
                 partResetAfterSuppression: flag('resetWhenSuppress'),
                 partSuppressCondition: flag('KJL_model_suppress_param'),
                 customParams
+            };
+        });
+    }
+
+    // =========================================================================
+    // SECTION 5b4: DOOR OPENING EXTRACTION (editorData -> Door Opening sheet)
+    // =========================================================================
+    // Reverse of compileDoorOpeningRow. Door Openings (editorData.customDoorHoles)
+    // aren't catalog parts — every one seen so far carries exactly the same
+    // fixed 8 parameters, so unlike Parts there's no dynamic Custom
+    // Parameters column here, just one column per field.
+    const DOOR_EXPORT_HEADERS = [
+        'Product serial number', 'Door Opening Name', 'Width', 'Height',
+        'Position X', 'Position Y', 'Position Z', 'Rotate X', 'Rotate Y', 'Rotate Z',
+        'Hide Conditions', 'Position Method', 'Door Opening Type', 'Minimum viable unit'
+    ];
+
+    function extractDoorOpeningsFromEditorData(ed, modelId) {
+        return (ed.customDoorHoles || []).map(hole => {
+            const find = (paramName) => (hole.parameters || []).find(p => p.paramName === paramName);
+            const val = (paramName) => {
+                const p = find(paramName);
+                return (p && p.value != null) ? p.value : '';
+            };
+            const posP = find('position');
+            const rotP = find('rotationDegree');
+            const pos = decodeFloat3(posP && posP.value);
+            const rot = decodeFloat3(rotP && rotP.value);
+            return {
+                serial: modelId,
+                name: hole.name || '',
+                width: val('width'), height: val('height'),
+                positionX: pos.x, positionY: pos.y, positionZ: pos.z,
+                rotateX: rot.x, rotateY: rot.y, rotateZ: rot.z,
+                hideCondition: val('ignore'),
+                positionMethod: val('invokedPosType'),
+                doorOpeningType: val('calculateType'),
+                adaptationUnit: val('adaptationUnit')
             };
         });
     }
@@ -2107,6 +2243,60 @@
         return String(max + 1);
     }
 
+    // Shared by Parts and Door Openings — combines whichever X/Y/Z axes the
+    // row actually supplied with whatever the target already had for the
+    // other axes, into the {"x":...,"y":...,"z":...} JSON these float3
+    // parameters (position/rotationDegree) are stored as.
+    function combineFloat3Json(x, y, z, existingRaw) {
+        let existing = {};
+        try { existing = existingRaw ? JSON.parse(existingRaw) : {}; } catch (e) { existing = {}; }
+        return JSON.stringify({
+            x: x !== '' ? x : (existing.x !== undefined ? existing.x : '0'),
+            y: y !== '' ? y : (existing.y !== undefined ? existing.y : '0'),
+            z: z !== '' ? z : (existing.z !== undefined ? existing.z : '0')
+        });
+    }
+
+    // Shared by Position Method on both Parts and Door Openings — a whole
+    // number or formula passes straight through; anything else is resolved
+    // as an OPTION NAME against the parameter's own real editorOptions
+    // (never hardcoded, since different parts/openings can list these
+    // differently), with an optional Chinese-label alias map as a fallback.
+    // Returns { value } on success or { error } (just the "valid names:
+    // ..." clause) on failure, so each caller can wrap it in its own
+    // field/row-specific message.
+    function resolveOptionNameValue(p, v, aliasMap) {
+        if (v.includes('#') || /^\d+$/.test(v)) return { value: v };
+        const vLower = v.toLowerCase();
+        let opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === vLower);
+        if (!opt && aliasMap && aliasMap[vLower]) {
+            const aliases = aliasMap[vLower];
+            opt = (p.editorOptions || []).find(o => aliases.includes(String(o.name)));
+        }
+        if (!opt) {
+            const valid = (p.editorOptions || []).map(o => o.name).join(', ');
+            return { error: `valid names: ${valid || '(none listed here)'}` };
+        }
+        return { value: opt.value };
+    }
+
+    // Door Opening Type (calculateType) is a plain enum, not a
+    // formula-capable field like Position Method — accepts either the raw
+    // stored value (so a downloaded sheet round-trips unedited, e.g.
+    // "value"/"formula"/"general") or a human-typed option display name
+    // ("Formula type").
+    function resolveEnumOptionValue(p, v) {
+        const opts = p.editorOptions || [];
+        if (opts.some(o => String(o.value) === v)) return { value: v };
+        const vLower = v.toLowerCase();
+        const opt = opts.find(o => String(o.name).toLowerCase() === vLower);
+        if (!opt) {
+            const valid = opts.map(o => `${o.name} (${o.value})`).join(', ');
+            return { error: `valid values: ${valid || '(none listed here)'}` };
+        }
+        return { value: opt.value };
+    }
+
     // Returns an error string on failure, or undefined on success — same
     // convention as compileParamEditRow (the import lookup is async and can
     // genuinely fail). Add or Edit, decided by whether row.partRefName
@@ -2191,50 +2381,26 @@
         // Only the supplied axis is overridden; the other axes keep
         // whatever the import response already had (own default, usually
         // "0" for a fresh part).
-        const combineFloat3 = (x, y, z, existingRaw) => {
-            let existing = {};
-            try { existing = existingRaw ? JSON.parse(existingRaw) : {}; } catch (e) { existing = {}; }
-            return JSON.stringify({
-                x: x !== '' ? x : (existing.x !== undefined ? existing.x : '0'),
-                y: y !== '' ? y : (existing.y !== undefined ? existing.y : '0'),
-                z: z !== '' ? z : (existing.z !== undefined ? existing.z : '0')
-            });
-        };
         if (row.positionX !== '' || row.positionY !== '' || row.positionZ !== '') {
             const p = (instance.parameters || []).find(x => x.paramName === 'position');
-            if (p) p.value = combineFloat3(row.positionX, row.positionY, row.positionZ, p.value);
+            if (p) p.value = combineFloat3Json(row.positionX, row.positionY, row.positionZ, p.value);
         }
         if (row.rotateX !== '' || row.rotateY !== '' || row.rotateZ !== '') {
             const p = (instance.parameters || []).find(x => x.paramName === 'rotationDegree');
-            if (p) p.value = combineFloat3(row.rotateX, row.rotateY, row.rotateZ, p.value);
+            if (p) p.value = combineFloat3Json(row.rotateX, row.rotateY, row.rotateZ, p.value);
         }
 
-        // Position Method — a whole number or formula passes straight
-        // through; anything else is resolved as an OPTION NAME against
-        // THIS part's own real editorOptions (confirmed on two separate
-        // real samples: Origin=0, Lower Left Rear=2, Custom baseline
-        // points=12 — not hardcoded here on purpose, since it's read live
-        // off the part's own definition rather than assumed, and different
-        // parts could plausibly list these differently).
+        // Position Method — see resolveOptionNameValue: confirmed on two
+        // separate real samples (Origin=0, Lower Left Rear=2, Custom
+        // baseline points=12) that this is read live off the part's own
+        // definition rather than assumed, since different parts could
+        // plausibly list these differently.
         if (row.positionMethod) {
             const p = (instance.parameters || []).find(x => x.paramName === 'invokedPosType');
             if (p) {
-                const v = row.positionMethod;
-                if (v.includes('#') || /^\d+$/.test(v)) {
-                    p.value = v;
-                } else {
-                    const vLower = v.toLowerCase();
-                    let opt = (p.editorOptions || []).find(o => String(o.name).toLowerCase() === vLower);
-                    if (!opt && POSITION_METHOD_ALIASES[vLower]) {
-                        const aliases = POSITION_METHOD_ALIASES[vLower];
-                        opt = (p.editorOptions || []).find(o => aliases.includes(String(o.name)));
-                    }
-                    if (!opt) {
-                        const valid = (p.editorOptions || []).map(o => o.name).join(', ');
-                        return `Position Method '${v}' isn't a valid option for part '${row.partName}' — valid names: ${valid || '(none listed on this part)'}.`;
-                    }
-                    p.value = opt.value;
-                }
+                const res = resolveOptionNameValue(p, row.positionMethod, POSITION_METHOD_ALIASES);
+                if (res.error) return `Position Method '${row.positionMethod}' isn't a valid option for part '${row.partName}' — ${res.error}.`;
+                p.value = res.value;
             }
         }
 
@@ -2334,6 +2500,66 @@
                     p.value = Utils.normalizeExpr(val);
                 }
             }
+        }
+    }
+
+    // Edit-only — no Add path (see DOOR_OPENING_EDIT's TASK_REGISTRY note):
+    // a Door Opening is matched by its exact Name (e.g. "Door Opening-1")
+    // against editorData.customDoorHoles, never created. Mirrors
+    // compilePartEditRow's own field-by-field dispatch, scaled down to the
+    // fixed 8 fields every Door Opening actually has.
+    async function compileDoorOpeningRow(ed, row) {
+        const instance = (ed.customDoorHoles || []).find(h => h.name === row.name);
+        if (!instance) {
+            return `Door Opening '${row.name}' not found on this model — this sheet edits existing Door Openings only (matched by exact Name); add it in the model editor first, or check for a typo.`;
+        }
+        const find = (paramName) => (instance.parameters || []).find(x => x.paramName === paramName);
+
+        // Width/Height — formula-capable text fields (real samples carry
+        // formulas like "#H-@BTS.H-30-25" as their normal, non-override
+        // value), so passed through Utils.normalizeExpr rather than
+        // restricted to numeric-only.
+        for (const [paramName, val] of [['width', row.width], ['height', row.height]]) {
+            if (!val) continue;
+            const p = find(paramName);
+            if (p) p.value = Utils.normalizeExpr(val);
+        }
+
+        if (row.positionX !== '' || row.positionY !== '' || row.positionZ !== '') {
+            const p = find('position');
+            if (p) p.value = combineFloat3Json(row.positionX, row.positionY, row.positionZ, p.value);
+        }
+        if (row.rotateX !== '' || row.rotateY !== '' || row.rotateZ !== '') {
+            const p = find('rotationDegree');
+            if (p) p.value = combineFloat3Json(row.rotateX, row.rotateY, row.rotateZ, p.value);
+        }
+
+        if (row.hideCondition) {
+            const p = find('ignore');
+            if (p) p.value = Utils.normalizeExpr(row.hideCondition);
+        }
+
+        if (row.positionMethod) {
+            const p = find('invokedPosType');
+            if (p) {
+                const res = resolveOptionNameValue(p, row.positionMethod, POSITION_METHOD_ALIASES);
+                if (res.error) return `Position Method '${row.positionMethod}' isn't a valid option for Door Opening '${row.name}' — ${res.error}.`;
+                p.value = res.value;
+            }
+        }
+
+        if (row.doorOpeningType) {
+            const p = find('calculateType');
+            if (p) {
+                const res = resolveEnumOptionValue(p, row.doorOpeningType);
+                if (res.error) return `Door Opening Type '${row.doorOpeningType}' isn't valid for Door Opening '${row.name}' — ${res.error}.`;
+                p.value = res.value;
+            }
+        }
+
+        if (row.adaptationUnit) {
+            const p = find('adaptationUnit');
+            if (p) p.value = Utils.normalizeExpr(row.adaptationUnit);
         }
     }
 
@@ -2699,6 +2925,11 @@
                 if (depErr) return { ok: false, msg: depErr };
             }
             ed.modelInstances = (ed.modelInstances || []).filter(mi => !resolved.includes(mi));
+        } else if (currentTask.id === 'DOOR_OPENING_EDIT') {
+            for (const row of data) {
+                const rowErr = await compileDoorOpeningRow(ed, row);
+                if (rowErr) return { ok: false, msg: rowErr };
+            }
         }
 
         if (_.isEqual(original, ed)) return { ok: true };
@@ -2848,23 +3079,25 @@
             <div style="padding:12px; flex:1; display:flex; flex-direction:column; gap:10px;">
                 <div style="font-size:10px; color:#888;">One Model ID per line (or comma-separated).</div>
                 <textarea id="extract-ids" placeholder="3FO3EYXBY6I1&#10;3FO3G5M9IGV2&#10;..." style="width:100%; height:90px; font-family:monospace; font-size:11px; padding:8px; border:1px solid #ddd; border-radius:6px; outline:none; resize:none; box-sizing:border-box;"></textarea>
-                <div style="display:flex; gap:6px;">
-                    <button id="do-extract-params" style="flex:1; padding:10px; background:#0071e3; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parameters</button>
-                    <button id="do-extract-parts" style="flex:1; padding:10px; background:#1d1d1f; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parts</button>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button id="do-extract-params" style="flex:1; min-width:110px; padding:10px; background:#0071e3; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parameters</button>
+                    <button id="do-extract-parts" style="flex:1; min-width:110px; padding:10px; background:#1d1d1f; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Parts</button>
+                    <button id="do-extract-doors" style="flex:1; min-width:110px; padding:10px; background:${THEME.indigo}; color:#fff; border:none; border-radius:6px; font-size:11px; cursor:pointer; font-weight:bold;">Extract Door Openings</button>
                 </div>
                 <textarea id="extract-log" readonly style="flex:1; width:100%; font-family:monospace; font-size:10.5px; padding:10px; border:1px solid #eee; background:#fafafa; border-radius:6px; outline:none; resize:none;"></textarea>
             </div>`;
         document.body.appendChild(d);
         const idsIn = d.querySelector('#extract-ids'); const logA = d.querySelector('#extract-log');
         const paramsBtn = d.querySelector('#do-extract-params'); const partsBtn = d.querySelector('#do-extract-parts');
+        const doorBtn = d.querySelector('#do-extract-doors');
         d.querySelector('#close-extract').onclick = () => { d.remove(); };
 
-        // Shared by both buttons — only what happens per-model (extractFn,
-        // unit label) and the download call differ.
+        // Shared by all three buttons — only what happens per-model
+        // (extractFn, unit label) and the download call differ.
         async function runExtraction(btn, defaultLabel, extractFn, unitLabel, download) {
             const ids = [...new Set(idsIn.value.split(/[\n,]/).map(s => s.trim()).filter(Boolean))];
             if (ids.length === 0) return;
-            paramsBtn.disabled = true; partsBtn.disabled = true; btn.innerText = 'Extracting...';
+            paramsBtn.disabled = true; partsBtn.disabled = true; doorBtn.disabled = true; btn.innerText = 'Extracting...';
             const tool = currentToolType();
             const allRows = []; const errors = [];
             for (let i = 0; i < ids.length; i++) {
@@ -2883,7 +3116,7 @@
             if (allRows.length > 0) download(allRows);
             logA.value += `\nDone. ${allRows.length} ${unitLabel} from ${ids.length - errors.length}/${ids.length} model(s).`;
             if (errors.length > 0) logA.value += `\n\nFailed:\n${errors.join('\n')}`;
-            paramsBtn.disabled = false; partsBtn.disabled = false; btn.innerText = defaultLabel;
+            paramsBtn.disabled = false; partsBtn.disabled = false; doorBtn.disabled = false; btn.innerText = defaultLabel;
         }
 
         paramsBtn.onclick = () => runExtraction(paramsBtn, 'Extract Parameters', extractParamsFromEditorData, 'parameter(s)', (allRows) => {
@@ -2911,6 +3144,14 @@
                 r.partIgnoreInternalInterference, r.partResetAfterSuppression,
                 r.partSuppressCondition,
                 ...customKeys.map(k => r.customParams && r.customParams[k] !== undefined ? r.customParams[k] : '')
+            ]);
+        });
+
+        doorBtn.onclick = () => runExtraction(doorBtn, 'Extract Door Openings', extractDoorOpeningsFromEditorData, 'door opening(s)', (allRows) => {
+            downloadCsvReport(allRows, 'door_openings_extract', DOOR_EXPORT_HEADERS, r => [
+                r.serial, r.name, r.width, r.height, r.positionX, r.positionY, r.positionZ,
+                r.rotateX, r.rotateY, r.rotateZ, r.hideCondition, r.positionMethod,
+                r.doorOpeningType, r.adaptationUnit
             ]);
         });
     }
