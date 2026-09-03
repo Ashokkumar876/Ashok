@@ -574,25 +574,18 @@
             // extra header rows above the real one (currently 3 total:
             // Group Name, then Parameter Name / DisplayName, then
             // Reference name / code — the last is what's actually matched
-            // below) — every one of them repeats the exact same fixed-
-            // column labels (e.g. "Product serial number"), so the header
-            // block's depth is detected by counting how many consecutive
-            // rows from the top literally read "Product serial number" in
-            // that column — something no real data row would ever contain.
-            // A single-header-row CSV (older exports, or hand-typed) has
-            // exactly one such row and is left untouched; whatever the
-            // count, only the LAST row in that block is kept as the real
-            // header and the rest are dropped.
+            // below). The fixed columns (Product serial number, Width, ...)
+            // are only populated on that real header row — blank on the
+            // rows above it — so the real header is found by scanning down
+            // for the first row that contains "Product serial number"
+            // ANYWHERE in it (not pinned to a specific column, so column
+            // order doesn't matter); everything above that row is dropped.
+            // A single-header-row CSV (older exports, or hand-typed) already
+            // has it on row 1, so this is a no-op for those.
             let rows = rawRows;
-            const serialColGuess = rawRows[0].findIndex(h => Utils.normHeader(h) === 'productserialnumber');
-            if (serialColGuess !== -1) {
-                let headerRowCount = 0;
-                while (headerRowCount < rawRows.length && Utils.normHeader(rawRows[headerRowCount][serialColGuess]) === 'productserialnumber') {
-                    headerRowCount++;
-                }
-                if (headerRowCount >= 2) {
-                    rows = [rawRows[headerRowCount - 1], ...rawRows.slice(headerRowCount)];
-                }
+            const headerRowIndex = rawRows.findIndex(r => r.some(c => Utils.normHeader(c) === 'productserialnumber'));
+            if (headerRowIndex > 0) {
+                rows = [rawRows[headerRowIndex], ...rawRows.slice(headerRowIndex + 1)];
             }
 
             const headers = rows[0];
@@ -3259,30 +3252,8 @@
         });
 
         partsBtn.onclick = () => runExtraction(partsBtn, 'Extract Parts', extractPartsFromEditorData, 'part(s)', (allRows) => {
-            // Custom Parameters columns are dynamic — the union of every
-            // key (simpleName or paramName) seen across all extracted
-            // parts. Whichever keys any part's own Link Parameters group
-            // (see LINK_GROUP_NAME_RE) lists come first, right after
-            // Suppress condition, matching the model editor's own grouping;
-            // everything else follows. Alphabetical within each bucket for
-            // a stable, predictable order.
             const allKeys = new Set(allRows.flatMap(r => Object.keys(r.customParams || {})));
             const linkGroupKeySet = new Set(allRows.flatMap(r => r.linkGroupKeys || []));
-            const priorityKeys = [...allKeys].filter(k => linkGroupKeySet.has(k)).sort();
-            const restKeys = [...allKeys].filter(k => !linkGroupKeySet.has(k)).sort();
-            const customKeys = [...priorityKeys, ...restKeys];
-
-            // The code alone (e.g. "CZ") is hard to identify — three REAL
-            // header rows, each its own spreadsheet row (not squeezed into
-            // one cell): row 1 is the Group Name (e.g. "Link Parameters" —
-            // same grouping the column order above uses), row 2 is the
-            // Parameter Name (displayName, e.g. "Material"), row 3 is the
-            // Reference name — the code, what actually gets matched back
-            // on import (see the loader's multi-header-row detection and
-            // dynamicPartColumns). Every fixed column repeats its own
-            // normal label across all three rows, so each row also reads
-            // as a complete header on its own. A key with no known group/
-            // displayName just falls back to the code for that row.
             const displayNameByKey = {};
             const groupNameByKey = {};
             allRows.forEach(r => {
@@ -3293,8 +3264,41 @@
                     if (g && !groupNameByKey[k]) groupNameByKey[k] = g;
                 });
             });
-            const groupHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys.map(k => groupNameByKey[k] || '')];
-            const displayHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys.map(k => displayNameByKey[k] || k)];
+
+            // Custom Parameters columns are dynamic — the union of every
+            // key (simpleName or paramName) seen across all extracted
+            // parts, CLUSTERED by group so same-group columns sit next to
+            // each other instead of scattered across an alphabetical-by-
+            // code order: Link Parameters keys (see LINK_GROUP_NAME_RE)
+            // come first, right after Suppress condition; every other
+            // named group follows as its own contiguous block (grouped by
+            // groupName, blocks ordered alphabetically by groupName for a
+            // stable/predictable layout); keys with no group at all come
+            // last. Alphabetical by key within each block.
+            const customKeys = [...allKeys].sort((a, b) => {
+                const rankOf = (k) => linkGroupKeySet.has(k) ? 0 : (groupNameByKey[k] ? 1 : 2);
+                const ra = rankOf(a), rb = rankOf(b);
+                if (ra !== rb) return ra - rb;
+                const ga = groupNameByKey[a] || '', gb = groupNameByKey[b] || '';
+                if (ga !== gb) return ga < gb ? -1 : 1;
+                return a < b ? -1 : (a > b ? 1 : 0);
+            });
+
+            // The code alone (e.g. "CZ") is hard to identify — three REAL
+            // header rows, each its own spreadsheet row (not squeezed into
+            // one cell): row 1 is the Group Name (e.g. "Link Parameters" —
+            // same grouping the column order above uses), row 2 is the
+            // Parameter Name (displayName, e.g. "Material"), row 3 is the
+            // Reference name — the code, what actually gets matched back
+            // on import (see the loader's header-row detection and
+            // dynamicPartColumns). The fixed columns (Product serial
+            // number, Width, ...) are only populated on row 3 — blank on
+            // rows 1-2 — since neither a Group Name nor a Parameter Name
+            // applies to them. A custom key with no known group/
+            // displayName just falls back to blank / the code itself.
+            const blankFixedRow = PART_EXPORT_HEADERS.map(() => '');
+            const groupHeaderRow = [...blankFixedRow, ...customKeys.map(k => groupNameByKey[k] || '')];
+            const displayHeaderRow = [...blankFixedRow, ...customKeys.map(k => displayNameByKey[k] || k)];
             const codeHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys];
 
             downloadCsvReport(allRows, 'parts_extract', groupHeaderRow, r => [
