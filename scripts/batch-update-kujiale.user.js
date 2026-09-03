@@ -2105,12 +2105,11 @@
         return (instance.parameters || []).find(p => p.paramName === paramName);
     }
 
-    // Matches the Link Parameters group a part's own customParamGroups[]
-    // can carry (seen as "Link Parameters", "Link Parameter", and "IMOS
-    // System Link Parameters" across real samples) — whichever keys that
-    // group lists are pulled to the front of the Custom Parameters columns
-    // on export, right after Suppress condition, per user request.
-    const LINK_GROUP_NAME_RE = /^(imos system )?link parameters?$/i;
+    // Any group name containing "Link Parameters" (Link Parameters, IMOS
+    // System Link Parameters, Link Parameters J Gola/C Gola/Finger Groove/
+    // Skirting, ...) is pulled to the front of the Custom Parameters
+    // columns on export, right after Suppress condition, per user request.
+    const LINK_GROUP_NAME_RE = /link parameters?/i;
 
     function decodeFloat3(raw) {
         if (!raw) return { x: '', y: '', z: '' };
@@ -2137,26 +2136,28 @@
     }
 
     function extractPartsFromEditorData(ed, modelId) {
-        // The Link Parameters grouping lives on the MODEL (ed.customParamGroups
-        // — the same top-level structure extractParamsFromEditorData's own
-        // groupOf() reads for top-level params, confirmed empty on every
-        // per-instance customParamGroups[] seen in real samples), not on
-        // each individual part instance. Computed once per model rather
-        // than per part.
-        const modelLinkGroupKeys = (ed.customParamGroups || [])
-            .filter(g => LINK_GROUP_NAME_RE.test(String(g.groupName || '').trim()))
-            .flatMap(g => g.paramNames || []);
-
-        // Every key's OWN group name (not just Link Parameters), for the
-        // Group Name header row — e.g. "Vent Option" for VT/VGF, "Light"
-        // for LTO/LTS/LTD. First group wins if a key is oddly listed in
-        // more than one.
-        const groupNameByKey = {};
+        // Group membership is genuinely per-PART, not just per-model — a
+        // real sample shows the SAME key (e.g. "GOL") filed under "Light"
+        // in the model-wide ed.customParamGroups but under a part's OWN
+        // "Link Parameters" group in that part's own customParamGroups[],
+        // and different parts can even give the same key different group
+        // names (BTS's own "Link Parameters" includes "BCS", SPL's own
+        // "Link Parameters" doesn't). So every key's group set is built
+        // from BOTH sources and can legitimately hold more than one name.
+        const modelGroupNamesByKey = {};
         (ed.customParamGroups || []).forEach(g => {
             (g.paramNames || []).forEach(name => {
-                if (!(name in groupNameByKey)) groupNameByKey[name] = g.groupName;
+                if (!modelGroupNamesByKey[name]) modelGroupNamesByKey[name] = new Set();
+                modelGroupNamesByKey[name].add(g.groupName);
             });
         });
+        const groupsForKey = (instance, key) => {
+            const set = new Set(modelGroupNamesByKey[key] || []);
+            (instance.customParamGroups || []).forEach(g => {
+                if ((g.paramNames || []).includes(key)) set.add(g.groupName);
+            });
+            return [...set];
+        };
 
         return (ed.modelInstances || []).map(instance => {
             const posP = findPartParam(instance, 'position');
@@ -2185,8 +2186,9 @@
             // partsBtn handler can build a "DisplayName\nCODE" column
             // header. Values only, not part of what's uploaded back.
             const customParamDisplayNames = {};
-            // Same idea, one level up — each key's own Group Name (e.g.
-            // "Link Parameters"), for the Group Name header row.
+            // Same idea, one level up — each key's own Group Name(s) (e.g.
+            // ["Light","Link Parameters"] — see groupsForKey above for why
+            // a key can have more than one), for the Group Name header row.
             const customParamGroupNames = {};
             (instance.parameters || [])
                 .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName) && !PART_RESERVED_PARAM_NAMES.has(p.simpleName))
@@ -2196,19 +2198,9 @@
                     const key = p.simpleName || p.paramName;
                     customParams[key] = val;
                     if (p.displayName) customParamDisplayNames[key] = p.displayName;
-                    if (groupNameByKey[key]) customParamGroupNames[key] = groupNameByKey[key];
+                    const groups = groupsForKey(instance, key);
+                    if (groups.length > 0) customParamGroupNames[key] = groups;
                 });
-
-            // Model-wide Link Parameters keys, plus this part's own
-            // customParamGroups[] (defensive — empty on every real sample
-            // seen so far, but merged in case some part type does carry
-            // its own grouping).
-            const linkGroupKeys = [
-                ...modelLinkGroupKeys,
-                ...(instance.customParamGroups || [])
-                    .filter(g => LINK_GROUP_NAME_RE.test(String(g.groupName || '').trim()))
-                    .flatMap(g => g.paramNames || [])
-            ];
 
             return {
                 serial: modelId,
@@ -2232,8 +2224,7 @@
                 partSuppressCondition: flag('KJL_model_suppress_param'),
                 customParams,
                 customParamDisplayNames,
-                customParamGroupNames,
-                linkGroupKeys
+                customParamGroupNames
             };
         });
     }
@@ -3253,51 +3244,66 @@
 
         partsBtn.onclick = () => runExtraction(partsBtn, 'Extract Parts', extractPartsFromEditorData, 'part(s)', (allRows) => {
             const allKeys = new Set(allRows.flatMap(r => Object.keys(r.customParams || {})));
-            const linkGroupKeySet = new Set(allRows.flatMap(r => r.linkGroupKeys || []));
             const displayNameByKey = {};
-            const groupNameByKey = {};
+            // A key can genuinely belong to more than one group — the same
+            // key can be filed differently at the model level vs. on a
+            // given part, or under several of a part's own groups at once
+            // (e.g. "PM_VISIBLE_LEFT" under both "Link Parameters" and
+            // "IMOS System Link Parameters" on the same part). Every group
+            // name seen for a key, from any part, is collected here.
+            const groupNamesByKey = {};
             allRows.forEach(r => {
                 Object.entries(r.customParamDisplayNames || {}).forEach(([k, d]) => {
                     if (d && !displayNameByKey[k]) displayNameByKey[k] = d;
                 });
-                Object.entries(r.customParamGroupNames || {}).forEach(([k, g]) => {
-                    if (g && !groupNameByKey[k]) groupNameByKey[k] = g;
+                Object.entries(r.customParamGroupNames || {}).forEach(([k, groups]) => {
+                    if (!groupNamesByKey[k]) groupNamesByKey[k] = new Set();
+                    (groups || []).forEach(g => { if (g) groupNamesByKey[k].add(g); });
                 });
+            });
+            // Multiple group names for the same key are shown joined by
+            // "||" in one cell, sorted for a stable/predictable label —
+            // e.g. "IMOS System Link Parameters||Link Parameters".
+            const groupLabelByKey = {};
+            Object.keys(groupNamesByKey).forEach(k => {
+                groupLabelByKey[k] = [...groupNamesByKey[k]].sort().join('||');
             });
 
             // Custom Parameters columns are dynamic — the union of every
             // key (simpleName or paramName) seen across all extracted
-            // parts, CLUSTERED by group so same-group columns sit next to
-            // each other instead of scattered across an alphabetical-by-
-            // code order: Link Parameters keys (see LINK_GROUP_NAME_RE)
-            // come first, right after Suppress condition; every other
-            // named group follows as its own contiguous block (grouped by
-            // groupName, blocks ordered alphabetically by groupName for a
-            // stable/predictable layout); keys with no group at all come
-            // last. Alphabetical by key within each block.
+            // parts, CLUSTERED so keys sharing the exact same group label
+            // sit next to each other instead of scattered across an
+            // alphabetical-by-code order. Any label containing "Link
+            // Parameters" (see LINK_GROUP_NAME_RE) comes first, right
+            // after Suppress condition; every other label follows as its
+            // own contiguous block (blocks ordered alphabetically by
+            // label); keys with no group at all come last. Alphabetical by
+            // key within each block.
             const customKeys = [...allKeys].sort((a, b) => {
-                const rankOf = (k) => linkGroupKeySet.has(k) ? 0 : (groupNameByKey[k] ? 1 : 2);
-                const ra = rankOf(a), rb = rankOf(b);
+                const la = groupLabelByKey[a] || '', lb = groupLabelByKey[b] || '';
+                const rankOf = (label) => LINK_GROUP_NAME_RE.test(label) ? 0 : (label ? 1 : 2);
+                const ra = rankOf(la), rb = rankOf(lb);
                 if (ra !== rb) return ra - rb;
-                const ga = groupNameByKey[a] || '', gb = groupNameByKey[b] || '';
-                if (ga !== gb) return ga < gb ? -1 : 1;
+                if (la !== lb) return la < lb ? -1 : 1;
                 return a < b ? -1 : (a > b ? 1 : 0);
             });
 
             // The code alone (e.g. "CZ") is hard to identify — three REAL
             // header rows, each its own spreadsheet row (not squeezed into
-            // one cell): row 1 is the Group Name (e.g. "Link Parameters" —
-            // same grouping the column order above uses), row 2 is the
-            // Parameter Name (displayName, e.g. "Material"), row 3 is the
-            // Reference name — the code, what actually gets matched back
-            // on import (see the loader's header-row detection and
-            // dynamicPartColumns). The fixed columns (Product serial
-            // number, Width, ...) are only populated on row 3 — blank on
-            // rows 1-2 — since neither a Group Name nor a Parameter Name
-            // applies to them. A custom key with no known group/
-            // displayName just falls back to blank / the code itself.
+            // one cell): row 1 is the Group Name (e.g. "Link Parameters",
+            // or "IMOS System Link Parameters||Link Parameters" when a key
+            // belongs to more than one — same grouping the column order
+            // above uses), row 2 is the Parameter Name (displayName, e.g.
+            // "Material"), row 3 is the Reference name — the code, what
+            // actually gets matched back on import (see the loader's
+            // header-row detection and dynamicPartColumns). The fixed
+            // columns (Product serial number, Width, ...) are only
+            // populated on row 3 — blank on rows 1-2 — since neither a
+            // Group Name nor a Parameter Name applies to them. A custom
+            // key with no known group/displayName just falls back to
+            // blank / the code itself.
             const blankFixedRow = PART_EXPORT_HEADERS.map(() => '');
-            const groupHeaderRow = [...blankFixedRow, ...customKeys.map(k => groupNameByKey[k] || '')];
+            const groupHeaderRow = [...blankFixedRow, ...customKeys.map(k => groupLabelByKey[k] || '')];
             const displayHeaderRow = [...blankFixedRow, ...customKeys.map(k => displayNameByKey[k] || k)];
             const codeHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys];
 
