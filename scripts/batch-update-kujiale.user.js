@@ -523,9 +523,9 @@
 
     // secondHeaderRow is optional — Extract Parts uses it for a REAL second
     // header row (row 1 = human-readable DisplayName labels, row 2 = the
-    // actual codes matched on import; see the loader's 2-header-row
+    // actual codes matched on import; see the loader's multi-header-row
     // detection below), every other export just passes one header row.
-    function downloadCsvReport(items, filenamePrefix, headerRow, rowMapper, secondHeaderRow) {
+    function downloadCsvReport(items, filenamePrefix, headerRow, rowMapper, extraHeaderRows) {
         if (!items || items.length === 0) return;
         // Quoted the same as every data cell (not just joined raw) — a
         // header can itself contain a comma, and only a quoted field
@@ -533,7 +533,7 @@
         // corrupting the row.
         const quoteCells = (arr) => arr.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',');
         let csv = "﻿" + quoteCells(headerRow) + "\n";
-        if (secondHeaderRow) csv += quoteCells(secondHeaderRow) + "\n";
+        (extraHeaderRows || []).forEach(r => { csv += quoteCells(r) + "\n"; });
         items.forEach(item => {
             csv += quoteCells(rowMapper(item)) + "\n";
         });
@@ -570,18 +570,29 @@
             const rawRows = Utils.parseCSV(f.target.result);
             if (!rawRows || rawRows.length < 2) { showNotification('❌ Empty or invalid CSV.', THEME.danger); return; }
 
-            // Extract Parts' Custom Parameters sheet can carry an OPTIONAL
-            // second header row (row 1 = human DisplayName labels, row 2 =
-            // the actual codes matched below) — detected by checking
-            // whether row 2's OWN "Product serial number" cell also reads
-            // literally "Product serial number", something no real data
-            // row would ever contain. When found, row 2 is used as the
-            // real header and row 1 is dropped; a single-header-row CSV
-            // (older exports, or hand-typed) is unaffected.
+            // Extract Parts' Custom Parameters sheet can carry OPTIONAL
+            // extra header rows above the real one (currently 3 total:
+            // Group Name, then Parameter Name / DisplayName, then
+            // Reference name / code — the last is what's actually matched
+            // below) — every one of them repeats the exact same fixed-
+            // column labels (e.g. "Product serial number"), so the header
+            // block's depth is detected by counting how many consecutive
+            // rows from the top literally read "Product serial number" in
+            // that column — something no real data row would ever contain.
+            // A single-header-row CSV (older exports, or hand-typed) has
+            // exactly one such row and is left untouched; whatever the
+            // count, only the LAST row in that block is kept as the real
+            // header and the rest are dropped.
             let rows = rawRows;
             const serialColGuess = rawRows[0].findIndex(h => Utils.normHeader(h) === 'productserialnumber');
-            if (serialColGuess !== -1 && rawRows.length >= 2 && Utils.normHeader(rawRows[1][serialColGuess]) === 'productserialnumber') {
-                rows = [rawRows[1], ...rawRows.slice(2)];
+            if (serialColGuess !== -1) {
+                let headerRowCount = 0;
+                while (headerRowCount < rawRows.length && Utils.normHeader(rawRows[headerRowCount][serialColGuess]) === 'productserialnumber') {
+                    headerRowCount++;
+                }
+                if (headerRowCount >= 2) {
+                    rows = [rawRows[headerRowCount - 1], ...rawRows.slice(headerRowCount)];
+                }
             }
 
             const headers = rows[0];
@@ -2143,6 +2154,17 @@
             .filter(g => LINK_GROUP_NAME_RE.test(String(g.groupName || '').trim()))
             .flatMap(g => g.paramNames || []);
 
+        // Every key's OWN group name (not just Link Parameters), for the
+        // Group Name header row — e.g. "Vent Option" for VT/VGF, "Light"
+        // for LTO/LTS/LTD. First group wins if a key is oddly listed in
+        // more than one.
+        const groupNameByKey = {};
+        (ed.customParamGroups || []).forEach(g => {
+            (g.paramNames || []).forEach(name => {
+                if (!(name in groupNameByKey)) groupNameByKey[name] = g.groupName;
+            });
+        });
+
         return (ed.modelInstances || []).map(instance => {
             const posP = findPartParam(instance, 'position');
             const rotP = findPartParam(instance, 'rotationDegree');
@@ -2170,6 +2192,9 @@
             // partsBtn handler can build a "DisplayName\nCODE" column
             // header. Values only, not part of what's uploaded back.
             const customParamDisplayNames = {};
+            // Same idea, one level up — each key's own Group Name (e.g.
+            // "Link Parameters"), for the Group Name header row.
+            const customParamGroupNames = {};
             (instance.parameters || [])
                 .filter(p => !PART_RESERVED_PARAM_NAMES.has(p.paramName) && !PART_RESERVED_PARAM_NAMES.has(p.simpleName))
                 .forEach(p => {
@@ -2178,6 +2203,7 @@
                     const key = p.simpleName || p.paramName;
                     customParams[key] = val;
                     if (p.displayName) customParamDisplayNames[key] = p.displayName;
+                    if (groupNameByKey[key]) customParamGroupNames[key] = groupNameByKey[key];
                 });
 
             // Model-wide Link Parameters keys, plus this part's own
@@ -2213,6 +2239,7 @@
                 partSuppressCondition: flag('KJL_model_suppress_param'),
                 customParams,
                 customParamDisplayNames,
+                customParamGroupNames,
                 linkGroupKeys
             };
         });
@@ -3245,25 +3272,32 @@
             const restKeys = [...allKeys].filter(k => !linkGroupKeySet.has(k)).sort();
             const customKeys = [...priorityKeys, ...restKeys];
 
-            // The code alone (e.g. "CZ") is hard to identify — a REAL
-            // second header row carries each custom column's displayName
-            // (e.g. "Material") right above its code, both as their own
-            // spreadsheet rows (not squeezed into one cell). Row 1 repeats
-            // every fixed column's normal label so it also reads as a
-            // complete header on its own; row 2 is what actually gets
-            // matched back on import (see the loader's 2-header-row
-            // detection and dynamicPartColumns) — falls back to the code
-            // itself when no part reported a displayName for it.
+            // The code alone (e.g. "CZ") is hard to identify — three REAL
+            // header rows, each its own spreadsheet row (not squeezed into
+            // one cell): row 1 is the Group Name (e.g. "Link Parameters" —
+            // same grouping the column order above uses), row 2 is the
+            // Parameter Name (displayName, e.g. "Material"), row 3 is the
+            // Reference name — the code, what actually gets matched back
+            // on import (see the loader's multi-header-row detection and
+            // dynamicPartColumns). Every fixed column repeats its own
+            // normal label across all three rows, so each row also reads
+            // as a complete header on its own. A key with no known group/
+            // displayName just falls back to the code for that row.
             const displayNameByKey = {};
+            const groupNameByKey = {};
             allRows.forEach(r => {
                 Object.entries(r.customParamDisplayNames || {}).forEach(([k, d]) => {
                     if (d && !displayNameByKey[k]) displayNameByKey[k] = d;
                 });
+                Object.entries(r.customParamGroupNames || {}).forEach(([k, g]) => {
+                    if (g && !groupNameByKey[k]) groupNameByKey[k] = g;
+                });
             });
+            const groupHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys.map(k => groupNameByKey[k] || '')];
             const displayHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys.map(k => displayNameByKey[k] || k)];
             const codeHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys];
 
-            downloadCsvReport(allRows, 'parts_extract', displayHeaderRow, r => [
+            downloadCsvReport(allRows, 'parts_extract', groupHeaderRow, r => [
                 r.serial, r.childSerial, r.partName, r.partRefName,
                 r.width, r.depth, r.height, r.positionX, r.positionY, r.positionZ,
                 r.rotateX, r.rotateY, r.rotateZ, r.positionMethod, r.partHideCondition,
@@ -3272,7 +3306,7 @@
                 r.partIgnoreInternalInterference, r.partResetAfterSuppression,
                 r.partSuppressCondition,
                 ...customKeys.map(k => r.customParams && r.customParams[k] !== undefined ? r.customParams[k] : '')
-            ], codeHeaderRow);
+            ], [displayHeaderRow, codeHeaderRow]);
         });
 
         doorBtn.onclick = () => runExtraction(doorBtn, 'Extract Door Openings', extractDoorOpeningsFromEditorData, 'door opening(s)', (allRows) => {
