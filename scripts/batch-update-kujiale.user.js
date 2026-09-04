@@ -38,7 +38,9 @@
         // Edit matches an existing part by Reference name (row.partRefName)
         // — a row whose refName isn't already on a part in the model adds a
         // new one, matching refName edits that one in place. A blank
-        // Reference name always adds (no other reliable key to match on).
+        // Reference name falls back to matching by Part Name instead (only
+        // when it identifies exactly one existing part — see
+        // compilePartEditRow); still adds if neither matches anything.
         PART_EDIT: { id: 'PART_EDIT', label: 'Add / Edit Parts', color: THEME.success, icon: '🧩', implemented: true },
         // Matches the part to delete by Reference name (row.partRefName) —
         // same identifier PART_EDIT uses to match an existing part.
@@ -2414,7 +2416,8 @@
     // Returns an error string on failure, or undefined on success — same
     // convention as compileParamEditRow (the import lookup is async and can
     // genuinely fail). Add or Edit, decided by whether row.partRefName
-    // matches an existing part's refName in this model.
+    // matches an existing part's refName in this model — or, when
+    // Reference name is blank, by Part Name instead (see below).
     async function compilePartEditRow(ed, row) {
         if (!ed.modelInstances) ed.modelInstances = [];
 
@@ -2422,11 +2425,28 @@
         // model means "update that part", not "reject as duplicate" — this
         // is the same match-by-key-and-reuse pattern compileParamEditRow
         // already uses for top-level parameters (ed.inputs.find by
-        // paramName). Requires Reference name; there's still no other
-        // reliable key to re-identify an already-added part (obsBrandGoodId
-        // alone can't disambiguate — the same catalog part can legitimately
-        // be added more than once, e.g. several identical screws).
+        // paramName). obsBrandGoodId alone can't disambiguate (the same
+        // catalog part can legitimately be added more than once, e.g.
+        // several identical screws), so a real key is still required.
         let instance = row.partRefName ? ed.modelInstances.find(mi => mi.refName === row.partRefName) : null;
+
+        // Reference name blank — fall back to Part Name as the match key
+        // (confirmed the hard way: leaving Reference name blank to edit an
+        // existing part instead pushed 6 brand-new duplicate "PVC Leg"
+        // parts, since blank refName used to mean "always add"). Only
+        // matches when the name identifies exactly ONE existing part;
+        // if the model already has more than one part sharing that same
+        // Part Name, it's genuinely ambiguous which one the row means —
+        // refuse to guess rather than silently editing/adding the wrong
+        // one. No match at all still falls through to the Add path below,
+        // same as a blank Reference name always has.
+        if (!instance && !row.partRefName && row.partName) {
+            const nameMatches = ed.modelInstances.filter(mi => mi.name === row.partName);
+            if (nameMatches.length > 1) {
+                return `Reference name is blank and Part Name '${row.partName}' matches ${nameMatches.length} existing parts on this model — ambiguous, refusing to guess which one to edit. Add a Reference name to identify exactly one part.`;
+            }
+            if (nameMatches.length === 1) instance = nameMatches[0];
+        }
 
         if (instance) {
             if (row.partName) instance.name = row.partName;
