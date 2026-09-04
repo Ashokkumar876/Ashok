@@ -829,7 +829,14 @@
             const partName = cell(row, idx.partName);
             const partRefName = cell(row, idx.partRefName);
             if (!serial) addErr(rowNum, 'Empty', partName, 'Product serial number', 'Model serial ID is empty.');
-            if (!childSerial) addErr(rowNum, serial, partName, 'Child Serial Number', 'Child Serial Number is required.');
+            // Child Serial Number is NOT required unconditionally — a blank
+            // Reference name AND Part Name that both fail to match any
+            // existing part is the only case that actually needs it (to
+            // fetch a new catalog part), and whether that happens can only
+            // be known against the live model at Run time (e.g. a self-
+            // modeled/custom-geometry part has no catalog id of its own to
+            // begin with, and is only ever edited, never added — see
+            // compilePartEditRow's own guard for the real error there).
             if (!partName) addErr(rowNum, serial, '', 'Part Name', 'Part Name is required.');
             // Reference name itself is optional (confirmed) — but when given,
             // it must be unique per model, same as Parameter Name is for
@@ -2452,7 +2459,16 @@
             if (row.partName) instance.name = row.partName;
         } else {
             // Add path: fetch the child's full definition and push a new
-            // instance, same as before.
+            // instance, same as before. Only reachable here when neither
+            // Reference name nor Part Name matched an existing part — a
+            // genuinely new part needs a real Child Serial Number to know
+            // WHAT to add; a self-modeled/custom-geometry part with no
+            // catalog id of its own can only ever be an edit, never an
+            // add, so this is a real, actionable error rather than a
+            // silent/confusing network failure.
+            if (!row.childSerial) {
+                return `Part '${row.partName || '(unnamed)'}' — no existing part matched by Reference name or Part Name, and Child Serial Number is blank, so there's nothing to add. If this part already exists on the model (e.g. a self-modeled part with no catalog id), set its Reference name or make its Part Name match exactly; a genuinely new part needs a real Child Serial Number to add from.`;
+            }
             const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
             let def;
             try {
