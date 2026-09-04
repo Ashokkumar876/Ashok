@@ -2437,26 +2437,48 @@
         // several identical screws), so a real key is still required.
         let instance = row.partRefName ? ed.modelInstances.find(mi => mi.refName === row.partRefName) : null;
 
-        // Reference name blank — fall back to Part Name as the match key
-        // (confirmed the hard way: leaving Reference name blank to edit an
-        // existing part instead pushed 6 brand-new duplicate "PVC Leg"
-        // parts, since blank refName used to mean "always add"). Only
-        // matches when the name identifies exactly ONE existing part;
-        // if the model already has more than one part sharing that same
-        // Part Name, it's genuinely ambiguous which one the row means —
-        // refuse to guess rather than silently editing/adding the wrong
-        // one. No match at all still falls through to the Add path below,
-        // same as a blank Reference name always has.
-        if (!instance && !row.partRefName && row.partName) {
+        // Reference name matched a real part directly, but its CURRENT
+        // Part Name doesn't match the row's — AND some OTHER existing part
+        // does match the row's Part Name exactly. That's a strong signal
+        // the row's Reference name is simply wrong (a typo, or copied from
+        // the wrong row) rather than an intentional rename — left alone,
+        // this would silently rename the WRONG part. A plain rename (no
+        // other part claims that name) still goes through untouched below.
+        if (instance && row.partName && instance.name !== row.partName) {
+            const nameOwner = ed.modelInstances.find(mi => mi !== instance && mi.name === row.partName);
+            if (nameOwner) {
+                return `Reference name '${row.partRefName}' matches part '${instance.name}', but Part Name '${row.partName}' in this row matches a DIFFERENT existing part (Reference name '${nameOwner.refName || '(blank)'}') — this looks like a mismatched row. Check the Reference name (or Part Name) for a typo before importing.`;
+            }
+        }
+
+        // No match by Reference name — either because it's blank, or
+        // because it's a BRAND-NEW name being assigned to a part that
+        // doesn't have one yet (e.g. exported with a blank Reference name,
+        // then filled in and re-imported to tag it) — fall back to Part
+        // Name as the match key (confirmed the hard way: leaving Reference
+        // name blank to edit an existing part instead pushed 6 brand-new
+        // duplicate "PVC Leg" parts, since blank/unmatched refName used to
+        // mean "always add" with no second attempt). Only matches when the
+        // name identifies exactly ONE existing part; if the model already
+        // has more than one part sharing that same Part Name, it's
+        // genuinely ambiguous which one the row means — refuse to guess
+        // rather than silently editing/adding the wrong one. No match at
+        // all (by either key) still falls through to the Add path below.
+        if (!instance && row.partName) {
             const nameMatches = ed.modelInstances.filter(mi => mi.name === row.partName);
             if (nameMatches.length > 1) {
-                return `Reference name is blank and Part Name '${row.partName}' matches ${nameMatches.length} existing parts on this model — ambiguous, refusing to guess which one to edit. Add a Reference name to identify exactly one part.`;
+                const reason = row.partRefName ? `Reference name '${row.partRefName}' doesn't match any existing part` : 'Reference name is blank';
+                return `${reason} and Part Name '${row.partName}' matches ${nameMatches.length} existing parts on this model — ambiguous, refusing to guess which one to edit (or which one to assign the Reference name to). Make the Part Name unique, or use the part's own existing Reference name to identify exactly one.`;
             }
             if (nameMatches.length === 1) instance = nameMatches[0];
         }
 
         if (instance) {
             if (row.partName) instance.name = row.partName;
+            // Reached only via the Part Name fallback above when it's
+            // genuinely new (a direct refName match already means
+            // instance.refName === row.partRefName, a no-op here).
+            if (row.partRefName) instance.refName = row.partRefName;
         } else {
             // Add path: fetch the child's full definition and push a new
             // instance, same as before. Only reachable here when neither
