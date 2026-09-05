@@ -1990,7 +1990,7 @@
     // so an existing model's current parameters can be pulled down and fed
     // straight back in as a batch-edit CSV.
     const PARAM_EXPORT_HEADERS = [
-        'Product Name', 'Product serial number', 'Parameter Category', 'Grouping',
+        'Product serial number', 'Product Name', 'Parameter Category', 'Grouping',
         'Parameter type', 'Data type', 'Display Name', 'Parameter Name', 'Value',
         'Minimum', 'Maximum', 'Step size', 'Options', 'Expression', 'Hide condition',
         'Locked condition', 'Default state', 'Composite type',
@@ -2042,7 +2042,7 @@
         try { const o = JSON.parse(v); return `${o.x},${o.y}`; } catch (e) { return v; }
     }
 
-    function extractParamsFromEditorData(ed, modelId) {
+    function extractParamsFromEditorData(ed, modelId, productName) {
         const groupOf = (paramName) => {
             const g = (ed.customParamGroups || []).find(g => (g.paramNames || []).includes(paramName));
             return g ? g.groupName : '';
@@ -2061,7 +2061,7 @@
                 const paramTypeId = input.paramTypeId;
                 const isAdvFormula = paramTypeId === 4 || paramTypeId === 7;
                 const row = {
-                    productName: '',
+                    productName: productName || '',
                     serial: modelId,
                     paramCategory: input.globalId ? 'Global' : 'Local',
                     grouping: groupOf(input.paramName),
@@ -2129,7 +2129,7 @@
     // "CB"/"CZ") — see the partsBtn handler in openExtractor, which appends
     // those columns after this fixed set.
     const PART_EXPORT_HEADERS = [
-        'Product serial number', 'Child Serial Number', 'Part Name', 'Reference name',
+        'Product serial number', 'Product Name', 'Child Serial Number', 'Part Name', 'Reference name',
         'Width', 'Depth', 'Height',
         'Position X', 'Position Y', 'Position Z', 'Rotate X', 'Rotate Y', 'Rotate Z',
         'Position Method', 'Hide Conditions', 'Replaceable', 'Quotation Required',
@@ -2188,7 +2188,7 @@
         return p.value;
     }
 
-    function extractPartsFromEditorData(ed, modelId) {
+    function extractPartsFromEditorData(ed, modelId, productName) {
         // Group membership is genuinely per-PART, not just per-model — a
         // real sample shows the SAME key (e.g. "GOL") filed under "Light"
         // in the model-wide ed.customParamGroups but under a part's OWN
@@ -2257,6 +2257,7 @@
 
             return {
                 serial: modelId,
+                productName: productName || '',
                 childSerial: instance.obsBrandGoodId || '',
                 partName: instance.name || '',
                 partRefName: instance.refName || '',
@@ -2290,12 +2291,12 @@
     // fixed 8 parameters, so unlike Parts there's no dynamic Custom
     // Parameters column here, just one column per field.
     const DOOR_EXPORT_HEADERS = [
-        'Product serial number', 'Door Opening Name', 'Width', 'Height',
+        'Product serial number', 'Product Name', 'Door Opening Name', 'Width', 'Height',
         'Position X', 'Position Y', 'Position Z', 'Rotate X', 'Rotate Y', 'Rotate Z',
         'Hide Conditions', 'Position Method', 'Door Opening Type', 'Minimum viable unit'
     ];
 
-    function extractDoorOpeningsFromEditorData(ed, modelId) {
+    function extractDoorOpeningsFromEditorData(ed, modelId, productName) {
         return (ed.customDoorHoles || []).map(hole => {
             const find = (paramName) => (hole.parameters || []).find(p => p.paramName === paramName);
             const val = (paramName) => {
@@ -2308,6 +2309,7 @@
             const rot = decodeFloat3(rotP && rotP.value);
             return {
                 serial: modelId,
+                productName: productName || '',
                 name: hole.name || '',
                 width: val('width'), height: val('height'),
                 positionX: pos.x, positionY: pos.y, positionZ: pos.z,
@@ -3281,7 +3283,12 @@
         if (!r.ok) throw new Error(`GET failed, status ${r.status}`);
         const j = await r.json();
         if (!j.editorData) throw new Error('No editorData in response.');
-        return j.editorData;
+        // The human-readable product name (e.g. "Tall Unit Open Unit") isn't
+        // part of editorData itself — it lives on sibling fields of the same
+        // API response, duplicated in both `model.name` and
+        // `paramModelInfo.name`.
+        const productName = (j.model && j.model.name) || (j.paramModelInfo && j.paramModelInfo.name) || '';
+        return { ed: j.editorData, productName };
     }
 
     function openExtractor() {
@@ -3320,8 +3327,8 @@
                 const id = ids[i];
                 logA.value = `Fetching ${i + 1}/${ids.length}: ${id}...`;
                 try {
-                    const ed = await fetchEditorDataFor(id, tool);
-                    const rows = extractFn(ed, id);
+                    const { ed, productName } = await fetchEditorDataFor(id, tool);
+                    const rows = extractFn(ed, id, productName);
                     allRows.push(...rows);
                     logA.value += ` ✅ ${rows.length} ${unitLabel}\n`;
                 } catch (e) {
@@ -3337,7 +3344,7 @@
 
         paramsBtn.onclick = () => runExtraction(paramsBtn, 'Extract Parameters', extractParamsFromEditorData, 'parameter(s)', (allRows) => {
             downloadCsvReport(allRows, 'params_extract', PARAM_EXPORT_HEADERS, r => [
-                r.productName, r.serial, r.paramCategory, r.grouping, r.paramType, r.dataType,
+                r.serial, r.productName, r.paramCategory, r.grouping, r.paramType, r.dataType,
                 r.displayName, r.paramName, r.value, r.min, r.max, r.step, r.options, r.expression,
                 r.hideCondition, r.lockedCondition, r.defaultState,
                 r.compositeType, r.valueRelationship, r.materialRange, r.expressionType, r.imosOutputCondition
@@ -3410,7 +3417,7 @@
             const codeHeaderRow = [...PART_EXPORT_HEADERS, ...customKeys];
 
             downloadCsvReport(allRows, 'parts_extract', groupHeaderRow, r => [
-                r.serial, r.childSerial, r.partName, r.partRefName,
+                r.serial, r.productName, r.childSerial, r.partName, r.partRefName,
                 r.width, r.depth, r.height, r.positionX, r.positionY, r.positionZ,
                 r.rotateX, r.rotateY, r.rotateZ, r.positionMethod, r.partHideCondition,
                 r.partReplaceable, r.partQuotationRequired, r.partRemovable, r.partComponentRemovable,
@@ -3423,7 +3430,7 @@
 
         doorBtn.onclick = () => runExtraction(doorBtn, 'Extract Door Openings', extractDoorOpeningsFromEditorData, 'door opening(s)', (allRows) => {
             downloadCsvReport(allRows, 'door_openings_extract', DOOR_EXPORT_HEADERS, r => [
-                r.serial, r.name, r.width, r.height, r.positionX, r.positionY, r.positionZ,
+                r.serial, r.productName, r.name, r.width, r.height, r.positionX, r.positionY, r.positionZ,
                 r.rotateX, r.rotateY, r.rotateZ, r.hideCondition, r.positionMethod,
                 r.doorOpeningType, r.adaptationUnit
             ]);
