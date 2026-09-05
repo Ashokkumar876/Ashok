@@ -2207,6 +2207,16 @@
     // columns on export, right after Suppress condition, per user request.
     const LINK_GROUP_NAME_RE = /link parameters?/i;
 
+    // System parameters (Top/Bottom/Right/Left Overlay = SY/XY/YY/ZY, Open
+    // Direction = KMFX, Door Panel Type = MBLX) genuinely have no group
+    // entry anywhere in editorData — confirmed, not a bug in the group
+    // lookup above — but per user request they still belong in the "Link
+    // Parameters" column cluster, placed at the END of it (not intermixed
+    // alphabetically with keys that have a REAL Link Parameters group), so
+    // it's obvious at a glance which ones were assigned there rather than
+    // read from the model.
+    const FORCED_LINK_GROUP_PARAM_NAMES = new Set(['SY', 'XY', 'YY', 'ZY', 'KMFX', 'MBLX']);
+
     function decodeFloat3(raw) {
         if (!raw) return { x: '', y: '', z: '' };
         try {
@@ -2247,6 +2257,11 @@
             (instance.customParamGroups || []).forEach(g => {
                 if ((g.paramNames || []).includes(key)) set.add(g.groupName);
             });
+            // See FORCED_LINK_GROUP_PARAM_NAMES — these system parameters
+            // have no group entry in editorData at all, so without this
+            // they'd fall into the "no group" bucket instead of Link
+            // Parameters.
+            if (set.size === 0 && FORCED_LINK_GROUP_PARAM_NAMES.has(key)) set.add('Link Parameters');
             return [...set];
         };
 
@@ -3443,6 +3458,13 @@
                 const rankOf = (label) => LINK_GROUP_NAME_RE.test(label) ? 0 : (label ? 1 : 2);
                 const ra = rankOf(la), rb = rankOf(lb);
                 if (ra !== rb) return ra - rb;
+                // FORCED_LINK_GROUP_PARAM_NAMES keys (no real group in
+                // editorData, defaulted to "Link Parameters" in
+                // groupsForKey) sort after every genuinely-grouped key in
+                // the same cluster, landing at the very end of the whole
+                // Link Parameters block instead of intermixed alphabetically.
+                const fa = FORCED_LINK_GROUP_PARAM_NAMES.has(a) ? 1 : 0, fb = FORCED_LINK_GROUP_PARAM_NAMES.has(b) ? 1 : 0;
+                if (fa !== fb) return fa - fb;
                 if (la !== lb) return la < lb ? -1 : 1;
                 return a < b ? -1 : (a > b ? 1 : 0);
             });
