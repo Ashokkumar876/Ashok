@@ -116,7 +116,7 @@
             const trimmed = expr.trim();
             if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
                 try {
-                    const parsed = JSON.parse(trimmed);
+                    const parsed = parsePrettyJsonCell(trimmed);
                     if (parsed && Array.isArray(parsed.cases)) {
                         parsed.cases.forEach(c => { if (c.condition) c.condition = Utils.normalizeExpr(c.condition); });
                     }
@@ -410,37 +410,48 @@
         return blanks;
     }
 
-    // Options/Range JSON columns (editorOptions/editorRecommends, each
-    // entry's own "ignore" formula) commonly span several lines — a real
-    // sample's "ignore" was 4 lines of AND/OR conditions. Plain
-    // JSON.stringify escapes each of those line breaks as the literal
-    // 2-character sequence "\n", which is unavoidable JSON syntax (a raw
-    // newline isn't legal inside a JSON string) but reads as dense,
-    // hard-to-follow text once it lands in a spreadsheet cell — Excel has
-    // no idea "\n" means anything, so a genuinely multi-line formula
-    // collapses onto one visual line. This keeps the cell valid JSON but
-    // swaps those escapes for REAL line breaks, which a quoted CSV field
-    // is perfectly able to hold (confirmed elsewhere in this file — the
-    // CSV parser/writer already round-trip embedded newlines correctly) —
-    // so the cell wraps the same way the formula does in Kujiale's own
-    // editor. stringifyOptionsForCsv is the export half; parseOptionsCell
-    // reverses it (real newline -> "\n") before JSON.parse, and is safe to
-    // use on cells that never went through this (a literal two-character
-    // "\n" already parses correctly on its own, untouched by the reverse
-    // substitution since it contains no real newline to convert).
+    // JSON columns that hold formula text (Options/Range entries' own
+    // "ignore" formula, and asset Condition blocks like {"cases":[...]})
+    // commonly span several lines and quote literals like "Acrylic" — a
+    // real sample's "ignore" was 4 lines of AND/OR conditions. Plain
+    // JSON.stringify escapes each line break as the literal 2-character
+    // sequence "\n" and each embedded quote as `\"`, which is unavoidable
+    // JSON syntax (a raw newline or unescaped quote isn't legal inside a
+    // JSON string) but reads as dense, hard-to-follow text once it lands
+    // in a spreadsheet cell — Excel has no idea "\n" means anything, so a
+    // genuinely multi-line formula collapses onto one visual line, and
+    // every quoted literal gets wrapped in backslash clutter.
     //
-    // Embedded quotes (e.g. the "Acrylic" literals inside the formula
-    // itself) are NOT similarly unescaped — a JSON string's own `\"`
-    // marks are how a parser tells "this is quoted text inside the value"
-    // apart from "this quote closes the value", and removing that mark
-    // without a full hand-written parser (rather than JSON.parse) would
-    // make the structure ambiguous to read back. Newlines carry no such
-    // structural meaning, which is what makes them safe to restore.
-    function stringifyOptionsForCsv(entries) {
-        return JSON.stringify(entries).replace(/\\n/g, '\n');
+    // prettifyJsonForCsv keeps the cell valid JSON but swaps those escapes
+    // for something readable:
+    //   - "\n" -> a REAL line break, which a quoted CSV field is
+    //     perfectly able to hold (confirmed elsewhere in this file — the
+    //     CSV parser/writer already round-trip embedded newlines
+    //     correctly) — so the cell wraps the same way the formula does in
+    //     Kujiale's own editor.
+    //   - \" -> a curly quote ("/"), alternating open/close so a pair
+    //     like \"Acrylic\" reads as "Acrylic". This is safe because
+    //     JSON.stringify NEVER emits the 2-character sequence \" for any
+    //     reason other than a literal quote INSIDE a string's content —
+    //     a quote that structurally closes/delimits the JSON string is
+    //     never backslash-escaped — so every \" in the output is safe to
+    //     swap for a placeholder and swap back unambiguously. Curly quotes
+    //     are used because real Kujiale formula text is plain ASCII and
+    //     would never legitimately contain one.
+    //
+    // parsePrettyJsonCell reverses both substitutions before JSON.parse,
+    // and is safe to use on cells that never went through this (a literal
+    // "\n" or plain `"` already parses correctly on its own, untouched by
+    // the reverse substitution since there's no real newline or curly
+    // quote to convert) — so old CSVs and hand-typed cells still work.
+    function prettifyJsonForCsv(value) {
+        let quoteIndex = 0;
+        return JSON.stringify(value)
+            .replace(/\\n/g, '\n')
+            .replace(/\\"/g, () => (quoteIndex++ % 2 === 0 ? '\u201c' : '\u201d'));
     }
-    function parseOptionsCell(raw) {
-        return JSON.parse(raw.replace(/\r\n|\r|\n/g, '\\n'));
+    function parsePrettyJsonCell(raw) {
+        return JSON.parse(raw.replace(/\r\n|\r|\n/g, '\\n').replace(/[\u201c\u201d]/g, '\\"'));
     }
 
     // =========================================================================
@@ -924,7 +935,7 @@
             }
             if (partStylePack && partStylePack.trim().startsWith('{')) {
                 try {
-                    const parsed = JSON.parse(partStylePack);
+                    const parsed = parsePrettyJsonCell(partStylePack);
                     if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) {
                         throw new Error('expected {"cases":[...],"defaultValue":...}');
                     }
@@ -1017,7 +1028,7 @@
                         const v = entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
                         if (v.startsWith('{') && v.includes('"cases"')) {
                             try {
-                                const condParsed = JSON.parse(v);
+                                const condParsed = parsePrettyJsonCell(v);
                                 if (condParsed && Array.isArray(condParsed.cases) && condParsed.defaultValue !== undefined) {
                                     const blanks = findBlankConditionCases(condParsed);
                                     if (blanks.length > 0) {
@@ -1042,7 +1053,7 @@
                 const v = row[index] !== undefined ? row[index].trim() : '';
                 if (!v || !v.startsWith('{') || !v.includes('"cases"')) return;
                 try {
-                    const condParsed = JSON.parse(v);
+                    const condParsed = parsePrettyJsonCell(v);
                     if (!condParsed || !Array.isArray(condParsed.cases) || condParsed.defaultValue === undefined) {
                         throw new Error('expected {"cases":[...],"defaultValue":...}');
                     }
@@ -1264,7 +1275,7 @@
                         addErr(rowNum, serial, refName, 'Options', 'Options is required for this Data type.', 'Provide a JSON array, e.g. [{"name":"A","value":"1"}].');
                     } else {
                         try {
-                            optionsParsed = parseOptionsCell(optionsRaw);
+                            optionsParsed = parsePrettyJsonCell(optionsRaw);
                             if (!Array.isArray(optionsParsed)) throw new Error('not array');
                             optionsParsed.forEach((o, oi) => {
                                 if (!o || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
@@ -1286,7 +1297,7 @@
                     }
                 } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
                     try {
-                        optionsParsed = parseOptionsCell(optionsRaw);
+                        optionsParsed = parsePrettyJsonCell(optionsRaw);
                         if (!Array.isArray(optionsParsed)) throw new Error('not array');
                     } catch (e) {
                         addErr(rowNum, serial, refName, 'Options', `Recommends value is not a valid JSON array: ${e.message}`);
@@ -1302,7 +1313,7 @@
                         addErr(rowNum, serial, refName, 'Options', 'Options is required when Range Type is set.');
                     } else if (materialRange === 'condition') {
                         try {
-                            optionsParsed = JSON.parse(optionsRaw);
+                            optionsParsed = parsePrettyJsonCell(optionsRaw);
                             if (!optionsParsed || !Array.isArray(optionsParsed.cases) || optionsParsed.defaultValue === undefined) {
                                 throw new Error('expected {"cases":[...],"defaultValue":...}');
                             }
@@ -1322,7 +1333,7 @@
                 // "Condition" needs a JSON {cases,defaultValue} block.
                 if (expressionType === 'condition' && expressionRaw) {
                     try {
-                        expressionParsed = JSON.parse(expressionRaw);
+                        expressionParsed = parsePrettyJsonCell(expressionRaw);
                         if (!expressionParsed || !Array.isArray(expressionParsed.cases) || expressionParsed.defaultValue === undefined) {
                             throw new Error('expected {"cases":[...],"defaultValue":...}');
                         }
@@ -1338,7 +1349,7 @@
             }
 
             if (!isAsset && expressionRaw && expressionRaw.trim().startsWith('{')) {
-                try { JSON.parse(expressionRaw); } catch (e) { addErr(rowNum, serial, refName, 'Expression', 'Expression contains invalid JSON.'); }
+                try { parsePrettyJsonCell(expressionRaw); } catch (e) { addErr(rowNum, serial, refName, 'Expression', 'Expression contains invalid JSON.'); }
             }
             const lockedCondition = cell(row, idx.lockedCondition);
             [['Hide condition', hideCondition], ['Minimum', min], ['Maximum', max], ['Locked condition', lockedCondition], ['Expression', !isAsset ? expressionRaw : (expressionType === 'reference' ? expressionRaw : '')]].forEach(([label, val]) => {
@@ -2024,7 +2035,7 @@
         try { obj = JSON.parse(raw); } catch (e) { return raw; }
         if (Array.isArray(obj.cases)) obj.cases.forEach(c => { if (c.value !== undefined) c.value = unwrapAssetVal(c.value); });
         if (obj.defaultValue !== undefined) obj.defaultValue = unwrapAssetVal(obj.defaultValue);
-        return JSON.stringify(obj);
+        return prettifyJsonForCsv(obj);
     }
     function float2ValueToPair(v) {
         if (v === null || v === undefined || v === '') return '';
@@ -2085,9 +2096,9 @@
                     }
                 } else {
                     if (paramTypeId === 2 && Array.isArray(input.editorOptions) && input.editorOptions.length) {
-                        row.options = stringifyOptionsForCsv(input.editorOptions.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                        row.options = prettifyJsonForCsv(input.editorOptions.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
                     } else if ((paramTypeId === 1 || paramTypeId === 3 || paramTypeId === 4) && Array.isArray(input.editorRecommends) && input.editorRecommends.length) {
-                        row.options = stringifyOptionsForCsv(input.editorRecommends.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                        row.options = prettifyJsonForCsv(input.editorRecommends.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
                     }
                     if ((isAdvFormula || paramTypeId === 5) && input.formula) {
                         row.expression = input.formula;
@@ -2690,7 +2701,7 @@
                     } else if (trimmed.startsWith('{') && trimmed.includes('"cases"')) {
                         let parsed;
                         try {
-                            parsed = JSON.parse(trimmed);
+                            parsed = parsePrettyJsonCell(trimmed);
                             if (!parsed || !Array.isArray(parsed.cases) || parsed.defaultValue === undefined) throw new Error('expected {"cases":[...],"defaultValue":...}');
                         } catch (e) {
                             return `Custom parameter '${entry.paramName}' value isn't a valid Condition JSON block for part '${row.partName}': ${e.message}`;
