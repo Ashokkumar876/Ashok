@@ -3458,14 +3458,17 @@
                 const rankOf = (label) => LINK_GROUP_NAME_RE.test(label) ? 0 : (label ? 1 : 2);
                 const ra = rankOf(la), rb = rankOf(lb);
                 if (ra !== rb) return ra - rb;
-                // FORCED_LINK_GROUP_PARAM_NAMES keys (no real group in
-                // editorData, defaulted to "Link Parameters" in
-                // groupsForKey) sort after every genuinely-grouped key in
-                // the same cluster, landing at the very end of the whole
-                // Link Parameters block instead of intermixed alphabetically.
+                if (la !== lb) return la < lb ? -1 : 1;
+                // Same label — FORCED_LINK_GROUP_PARAM_NAMES keys (no real
+                // group in editorData, defaulted to exactly "Link
+                // Parameters" in groupsForKey) sort after every genuinely-
+                // grouped key sharing that SAME label, landing at the end
+                // of the "Link Parameters" block specifically — not past
+                // other same-rank labels like "Link Parameters Visible
+                // Panel" or "Link Parameters Wicker Basket", which keep
+                // their own alphabetical position untouched.
                 const fa = FORCED_LINK_GROUP_PARAM_NAMES.has(a) ? 1 : 0, fb = FORCED_LINK_GROUP_PARAM_NAMES.has(b) ? 1 : 0;
                 if (fa !== fb) return fa - fb;
-                if (la !== lb) return la < lb ? -1 : 1;
                 return a < b ? -1 : (a > b ? 1 : 0);
             });
 
