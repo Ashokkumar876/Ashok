@@ -410,6 +410,39 @@
         return blanks;
     }
 
+    // Options/Range JSON columns (editorOptions/editorRecommends, each
+    // entry's own "ignore" formula) commonly span several lines — a real
+    // sample's "ignore" was 4 lines of AND/OR conditions. Plain
+    // JSON.stringify escapes each of those line breaks as the literal
+    // 2-character sequence "\n", which is unavoidable JSON syntax (a raw
+    // newline isn't legal inside a JSON string) but reads as dense,
+    // hard-to-follow text once it lands in a spreadsheet cell — Excel has
+    // no idea "\n" means anything, so a genuinely multi-line formula
+    // collapses onto one visual line. This keeps the cell valid JSON but
+    // swaps those escapes for REAL line breaks, which a quoted CSV field
+    // is perfectly able to hold (confirmed elsewhere in this file — the
+    // CSV parser/writer already round-trip embedded newlines correctly) —
+    // so the cell wraps the same way the formula does in Kujiale's own
+    // editor. stringifyOptionsForCsv is the export half; parseOptionsCell
+    // reverses it (real newline -> "\n") before JSON.parse, and is safe to
+    // use on cells that never went through this (a literal two-character
+    // "\n" already parses correctly on its own, untouched by the reverse
+    // substitution since it contains no real newline to convert).
+    //
+    // Embedded quotes (e.g. the "Acrylic" literals inside the formula
+    // itself) are NOT similarly unescaped — a JSON string's own `\"`
+    // marks are how a parser tells "this is quoted text inside the value"
+    // apart from "this quote closes the value", and removing that mark
+    // without a full hand-written parser (rather than JSON.parse) would
+    // make the structure ambiguous to read back. Newlines carry no such
+    // structural meaning, which is what makes them safe to restore.
+    function stringifyOptionsForCsv(entries) {
+        return JSON.stringify(entries).replace(/\\n/g, '\n');
+    }
+    function parseOptionsCell(raw) {
+        return JSON.parse(raw.replace(/\r\n|\r|\n/g, '\\n'));
+    }
+
     // =========================================================================
     // SECTION 3: UI CONSTRUCTION (frozen layout)
     // =========================================================================
@@ -1231,7 +1264,7 @@
                         addErr(rowNum, serial, refName, 'Options', 'Options is required for this Data type.', 'Provide a JSON array, e.g. [{"name":"A","value":"1"}].');
                     } else {
                         try {
-                            optionsParsed = JSON.parse(optionsRaw);
+                            optionsParsed = parseOptionsCell(optionsRaw);
                             if (!Array.isArray(optionsParsed)) throw new Error('not array');
                             optionsParsed.forEach((o, oi) => {
                                 if (!o || o.value === undefined) throw new Error(`entry ${oi} missing name/value`);
@@ -1253,7 +1286,7 @@
                     }
                 } else if ((dType === 'range' || dType === 'interval' || (dType === 'advanced formula' && compositeType === 'range')) && optionsRaw) {
                     try {
-                        optionsParsed = JSON.parse(optionsRaw);
+                        optionsParsed = parseOptionsCell(optionsRaw);
                         if (!Array.isArray(optionsParsed)) throw new Error('not array');
                     } catch (e) {
                         addErr(rowNum, serial, refName, 'Options', `Recommends value is not a valid JSON array: ${e.message}`);
@@ -2052,9 +2085,9 @@
                     }
                 } else {
                     if (paramTypeId === 2 && Array.isArray(input.editorOptions) && input.editorOptions.length) {
-                        row.options = JSON.stringify(input.editorOptions.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                        row.options = stringifyOptionsForCsv(input.editorOptions.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
                     } else if ((paramTypeId === 1 || paramTypeId === 3 || paramTypeId === 4) && Array.isArray(input.editorRecommends) && input.editorRecommends.length) {
-                        row.options = JSON.stringify(input.editorRecommends.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
+                        row.options = stringifyOptionsForCsv(input.editorRecommends.map(o => ({ name: o.name, value: o.value, ignore: o.ignore != null ? o.ignore : '' })));
                     }
                     if ((isAdvFormula || paramTypeId === 5) && input.formula) {
                         row.expression = input.formula;
