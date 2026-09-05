@@ -56,6 +56,10 @@
     let currentTask = null;
     let parsedData = null; // Map<serial, row[]> (row = single object for QUOTE)
     let preValidationErrors = [];
+    // Unlike preValidationErrors, a warning never skips the row — it's
+    // informational only (e.g. "this value got auto-corrected before
+    // upload"), so the corrected value still goes through.
+    let preValidationWarnings = [];
     let lastRunErrors = [];
     let lastDeleteSkippedProtected = []; // refNames of W/D/H/CZ silently skipped on PARAM_DEL
     let deleteResetValues = new Map(); // serial -> Map<refName, value> — optional reset for a skipped protected param, from the Delete CSV's own Value column
@@ -599,7 +603,7 @@
     document.getElementById('load-btn').onclick = () => { fileInput.click(); };
 
     function resetState() {
-        parsedData = null; preValidationErrors = []; lastRunErrors = [];
+        parsedData = null; preValidationErrors = []; preValidationWarnings = []; lastRunErrors = [];
         document.getElementById('log-text').value = '';
         document.getElementById('error-download').style.display = 'none';
         document.getElementById('run-error-download').style.display = 'none';
@@ -638,6 +642,7 @@
             const idx = getColumnIndices(headers);
 
             preValidationErrors = [];
+            preValidationWarnings = [];
             if (currentTask.id === 'QUOTE') {
                 validateQuoteHeaders(idx);
             } else if (currentTask.id === 'PARAM_EDIT') {
@@ -693,21 +698,33 @@
             const protectedNote = lastDeleteSkippedProtected.length > 0
                 ? ` (${lastDeleteSkippedProtected.length} system parameter(s) [${[...new Set(lastDeleteSkippedProtected)].join(', ')}] always kept — skipped, not an error.)`
                 : '';
+            // Warnings never block or skip a row (the corrected value still
+            // uploads) — just surfaced so the user knows something in their
+            // CSV got auto-corrected, e.g. a Part Name's irregular spacing.
+            const warningBlock = preValidationWarnings.length > 0
+                ? `\n\n⚠️ ${preValidationWarnings.length} value(s) auto-corrected before upload:\n` +
+                  preValidationWarnings.map(w => `Row ${w.row} (${w.serial}) — ${w.col}: ${w.msg}`).join('\n')
+                : '';
             if (parsedData.size === 0) {
-                document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.`;
+                document.getElementById('log-text').value = `❌ Every row had an error — nothing to run. Download report, fix, and re-import.${warningBlock}`;
                 document.getElementById('error-download').style.display = 'block';
                 showNotification(`❌ ${preValidationErrors.length} validation error(s) found — no valid rows.`, THEME.danger);
                 parsedData = null;
             } else if (errorRows.size > 0) {
-                document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.${protectedNote}`;
+                document.getElementById('log-text').value = `⚠️ ${preValidationErrors.length} error(s) on ${errorRows.size} row(s) — those rows are skipped. ${parsedData.size} model(s) ready to run.${protectedNote}${warningBlock}`;
                 document.getElementById('error-download').style.display = 'block';
                 runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
                 showNotification(`⚠️ ${errorRows.size} row(s) skipped (errors) — ${parsedData.size} model(s) still ready.`, THEME.warning);
             } else {
-                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.${protectedNote}`;
+                document.getElementById('log-text').value = `✅ ${parsedData.size} model(s) validated. Press Run.${protectedNote}${warningBlock}`;
                 document.getElementById('error-download').style.display = 'none';
                 runBtn.disabled = false; runBtn.style.backgroundColor = THEME.textMain; runBtn.style.color = '#fff'; runBtn.style.pointerEvents = 'auto'; runBtn.style.cursor = 'pointer';
-                showNotification(`✅ ${parsedData.size} model(s) ready to run.${lastDeleteSkippedProtected.length > 0 ? ' System params kept.' : ''}`, THEME.success);
+                showNotification(
+                    preValidationWarnings.length > 0
+                        ? `✅ ${parsedData.size} model(s) ready — ${preValidationWarnings.length} value(s) auto-corrected, see log.`
+                        : `✅ ${parsedData.size} model(s) ready to run.${lastDeleteSkippedProtected.length > 0 ? ' System params kept.' : ''}`,
+                    preValidationWarnings.length > 0 ? THEME.warning : THEME.success
+                );
             }
         };
         reader.readAsText(file);
@@ -793,6 +810,17 @@
         preValidationErrors.push({ row, serial: serial || '', refName: refName || '', col, msg, fix: fix || '' });
     }
 
+    function addWarn(row, serial, refName, col, msg) {
+        preValidationWarnings.push({ row, serial: serial || '', refName: refName || '', col, msg });
+    }
+
+    // Collapses any run of internal whitespace (double spaces, tabs) down to
+    // a single space — cell() already trims the leading/trailing edges, but
+    // leaves "Top  Shelf" (double space mid-string) untouched.
+    function collapseInternalSpaces(v) {
+        return String(v || '').replace(/\s+/g, ' ').trim();
+    }
+
     function validateQuoteHeaders(idx) {
         if (idx.serial === -1) addErr('Header', '', '', 'Product serial number', "Missing required column 'Product serial number'.");
         if (idx.w === -1 && idx.d === -1 && idx.h === -1) {
@@ -870,7 +898,17 @@
             const rowNum = i + 1;
             const serial = cell(row, idx.serial);
             const childSerial = cell(row, idx.childSerial);
-            const partName = cell(row, idx.partName);
+            const partNameRaw = cell(row, idx.partName);
+            const partName = collapseInternalSpaces(partNameRaw);
+            // cell() already trims the leading/trailing edges (so a
+            // trailing-space "Top Shelf " is already clean by this point),
+            // but a double space BETWEEN words ("Top  Shelf") survives that
+            // trim — flagged here so the user knows it was corrected, not
+            // silently changed. The corrected, single-spaced name is what
+            // actually gets uploaded (see buildDataMap's PART_EDIT branch).
+            if (partNameRaw && partNameRaw !== partName) {
+                addWarn(rowNum, serial, partName, 'Part Name', `Part Name '${partNameRaw}' had extra/irregular spacing — normalized to '${partName}' before upload.`);
+            }
             const partRefName = cell(row, idx.partRefName);
             if (!serial) addErr(rowNum, 'Empty', partName, 'Product serial number', 'Model serial ID is empty.');
             // Child Serial Number is NOT required unconditionally — a blank
@@ -1425,7 +1463,7 @@
             if (taskId === 'PART_DEL') {
                 map.get(serial).push({
                     childSerial: cell(row, idx.childSerial),
-                    partName: cell(row, idx.partName),
+                    partName: collapseInternalSpaces(cell(row, idx.partName)),
                     partRefName: cell(row, idx.partRefName)
                 });
                 continue;
@@ -1437,7 +1475,7 @@
                     .filter(e => e.value !== '');
                 map.get(serial).push({
                     childSerial: cell(row, idx.childSerial),
-                    partName: cell(row, idx.partName),
+                    partName: collapseInternalSpaces(cell(row, idx.partName)),
                     partRefName: cell(row, idx.partRefName),
                     styleParameter: cell(row, idx.styleParameter),
                     width: cell(row, idx.w),
@@ -2531,6 +2569,18 @@
             // silent/confusing network failure.
             if (!row.childSerial) {
                 return `Part '${row.partName || '(unnamed)'}' — no existing part matched by Reference name or Part Name, and Child Serial Number is blank, so there's nothing to add. If this part already exists on the model (e.g. a self-modeled part with no catalog id), set its Reference name or make its Part Name match exactly; a genuinely new part needs a real Child Serial Number to add from.`;
+            }
+            // A brand-new part landing on a Part Name that's already in use
+            // would leave two parts sharing one name — nothing distinguishes
+            // them on the next Part-Name-based import (falls straight into
+            // the "ambiguous, refusing to guess" guard above), so this is
+            // caught up front instead of only surfacing later, confusingly,
+            // on a completely different row.
+            if (row.partName) {
+                const nameOwner = ed.modelInstances.find(mi => mi.name === row.partName);
+                if (nameOwner) {
+                    return `Cannot add a new part named '${row.partName}' — that name is already used by an existing part on this model (Reference name '${nameOwner.refName || '(blank)'}'). Give the new part a different Part Name, or if you meant to edit that existing part instead, set its Reference name in this row.`;
+                }
             }
             const parentHasCZ = (ed.inputs || []).some(i => i.paramName === 'CZ');
             let def;
