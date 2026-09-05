@@ -247,6 +247,11 @@
             childSerial: findCol(n, 'childserialnumber', 'childserial'),
             partName: findCol(n, 'partname'),
             partRefName: findCol(n, 'referencename'),
+            // Export-only, informational — never read back on import (the
+            // product name isn't a per-part setting), but still needs to be
+            // a recognized column so dynamicPartColumns doesn't mistake it
+            // for a live Custom Parameter and fail with "not found on part".
+            productName: findCol(n, 'productname'),
             // Part attribute columns — every one of these maps to a "value"
             // field inside the newly-added instance's own parameters[]
             // (confirmed against a real editorData sample: Shutter
@@ -297,7 +302,7 @@
     // than re-deriving header name patterns) means it can never drift out
     // of sync with what getColumnIndices actually matches.
     const PART_FIXED_IDX_KEYS = [
-        'serial', 'childSerial', 'partName', 'partRefName', 'styleParameter',
+        'serial', 'productName', 'childSerial', 'partName', 'partRefName', 'styleParameter',
         'w', 'd', 'h', 'positionX', 'positionY', 'positionZ',
         'rotateX', 'rotateY', 'rotateZ', 'positionMethod', 'partHideCondition',
         'partReplaceable', 'partQuotationRequired', 'partRemovable', 'partComponentRemovable',
