@@ -1993,8 +1993,8 @@
         'Product Name', 'Product serial number', 'Parameter Category', 'Grouping',
         'Parameter type', 'Data type', 'Display Name', 'Parameter Name', 'Value',
         'Minimum', 'Maximum', 'Step size', 'Options', 'Expression', 'Hide condition',
-        'Locked condition', 'IMOS Output Condition', 'Default state', 'Composite type',
-        'Value relationships', 'Range Type', 'Expression Type'
+        'Locked condition', 'Default state', 'Composite type',
+        'Value relationships', 'Range Type', 'Expression Type', 'IMOS Output Condition'
     ];
     const DTYPE_BY_PARAM_TYPE_ID = { 0: 'Unlimited', 1: 'Range', 2: 'Options', 3: 'Interval', 4: 'Advanced Formula', 5: 'Formula', 6: 'Fixed Value', 7: 'Advanced Formula' };
     const PTYPE_BY_VALUE_TYPE = { int: 'Integer', string: 'Text', boolean: 'Boolean', booleanlist: 'Multiple Boolean Values', float2: 'Float2', float: 'Float' };
@@ -3339,8 +3339,8 @@
             downloadCsvReport(allRows, 'params_extract', PARAM_EXPORT_HEADERS, r => [
                 r.productName, r.serial, r.paramCategory, r.grouping, r.paramType, r.dataType,
                 r.displayName, r.paramName, r.value, r.min, r.max, r.step, r.options, r.expression,
-                r.hideCondition, r.lockedCondition, r.imosOutputCondition, r.defaultState,
-                r.compositeType, r.valueRelationship, r.materialRange, r.expressionType
+                r.hideCondition, r.lockedCondition, r.defaultState,
+                r.compositeType, r.valueRelationship, r.materialRange, r.expressionType, r.imosOutputCondition
             ]);
         });
 
