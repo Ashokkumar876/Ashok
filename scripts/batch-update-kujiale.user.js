@@ -2189,23 +2189,18 @@
     }
 
     function extractPartsFromEditorData(ed, modelId, productName) {
-        // Group membership is genuinely per-PART, not just per-model — a
-        // real sample shows the SAME key (e.g. "GOL") filed under "Light"
-        // in the model-wide ed.customParamGroups but under a part's OWN
-        // "Link Parameters" group in that part's own customParamGroups[],
-        // and different parts can even give the same key different group
-        // names (BTS's own "Link Parameters" includes "BCS", SPL's own
-        // "Link Parameters" doesn't). So every key's group set is built
-        // from BOTH sources and can legitimately hold more than one name.
-        const modelGroupNamesByKey = {};
-        (ed.customParamGroups || []).forEach(g => {
-            (g.paramNames || []).forEach(name => {
-                if (!modelGroupNamesByKey[name]) modelGroupNamesByKey[name] = new Set();
-                modelGroupNamesByKey[name].add(g.groupName);
-            });
-        });
+        // Group membership for the Group Name column comes ONLY from the
+        // part's own customParamGroups[] — never from the model-wide
+        // ed.customParamGroups. The same key is often filed under a
+        // different, more generic name at the model level (e.g. "CB"/"FT"
+        // under model-wide "Carcass") while the part itself groups it under
+        // its own "Link Parameters" — the part's own label is what belongs
+        // on that part's row, so the model-level grouping is intentionally
+        // left out here (confirmed against a real sample: every key a part
+        // exposes is also covered by that part's own customParamGroups, so
+        // nothing is lost by dropping the model-level fallback).
         const groupsForKey = (instance, key) => {
-            const set = new Set(modelGroupNamesByKey[key] || []);
+            const set = new Set();
             (instance.customParamGroups || []).forEach(g => {
                 if ((g.paramNames || []).includes(key)) set.add(g.groupName);
             });
