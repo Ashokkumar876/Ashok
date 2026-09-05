@@ -247,6 +247,11 @@
             childSerial: findCol(n, 'childserialnumber', 'childserial'),
             partName: findCol(n, 'partname'),
             partRefName: findCol(n, 'referencename'),
+            // Optional, import-only rename instruction: Reference name
+            // above stays the lookup key (the part's CURRENT ref name,
+            // unchanged in meaning), this is "rename it to this instead" —
+            // see the rename block in compilePartEditRow.
+            newPartRefName: findCol(n, 'newreferencename', 'newrefname'),
             // Export-only, informational — never read back on import (the
             // product name isn't a per-part setting), but still needs to be
             // a recognized column so dynamicPartColumns doesn't mistake it
@@ -302,7 +307,7 @@
     // than re-deriving header name patterns) means it can never drift out
     // of sync with what getColumnIndices actually matches.
     const PART_FIXED_IDX_KEYS = [
-        'serial', 'productName', 'childSerial', 'partName', 'partRefName', 'styleParameter',
+        'serial', 'productName', 'childSerial', 'partName', 'partRefName', 'newPartRefName', 'styleParameter',
         'w', 'd', 'h', 'positionX', 'positionY', 'positionZ',
         'rotateX', 'rotateY', 'rotateZ', 'positionMethod', 'partHideCondition',
         'partReplaceable', 'partQuotationRequired', 'partRemovable', 'partComponentRemovable',
@@ -897,6 +902,7 @@
     function validatePartEditRows(rows, idx) {
         const seenPerModel = new Map();
         const seenRefNamePerModel = new Map();
+        const seenNewRefNamePerModel = new Map();
         const dynCols = dynamicPartColumns(rows, idx);
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i]; if (row.length <= 1 && !row[0]) continue;
@@ -915,6 +921,7 @@
                 addWarn(rowNum, serial, partName, 'Part Name', `Part Name '${partNameRaw}' had extra/irregular spacing — normalized to '${partName}' before upload.`);
             }
             const partRefName = cell(row, idx.partRefName);
+            const newPartRefName = cell(row, idx.newPartRefName);
             if (!serial) addErr(rowNum, 'Empty', partName, 'Product serial number', 'Model serial ID is empty.');
             // Child Serial Number is NOT required unconditionally — a blank
             // Reference name AND Part Name that both fail to match any
@@ -961,6 +968,36 @@
                     addErr(rowNum, serial, partRefName, 'Reference name', `Duplicate Reference name '${partRefName}' found — also used on row ${first.rowNum} for this model.`);
                 } else {
                     refMap.set(partRefName, { rowNum: rowNum, flagged: false });
+                }
+            }
+
+            // New Reference Name (rename instruction): needs something to
+            // rename FROM — Reference name or Part Name identifying the
+            // existing part — or there's nothing to key the rename off of.
+            // (Whether that identifier actually matches a real part can
+            // only be checked live at Run time, same as elsewhere in this
+            // sheet.)
+            if (newPartRefName && !partRefName && !partName) {
+                addErr(rowNum, serial, '', 'New Reference Name', `New Reference Name '${newPartRefName}' given, but both Reference name and Part Name are blank — nothing to identify which existing part to rename.`);
+            }
+            // Same New Reference Name target reused across different rows
+            // for the same model — would land two parts on one refName.
+            // (A target that collides with an EXISTING part's CURRENT
+            // refName can only be checked live at Run time, in
+            // compilePartEditRow — this pass only sees the CSV's own
+            // contents.)
+            if (serial && newPartRefName) {
+                if (!seenNewRefNamePerModel.has(serial)) seenNewRefNamePerModel.set(serial, new Map());
+                const newRefMap = seenNewRefNamePerModel.get(serial);
+                if (newRefMap.has(newPartRefName)) {
+                    const first = newRefMap.get(newPartRefName);
+                    if (!first.flagged) {
+                        addErr(first.rowNum, serial, newPartRefName, 'New Reference Name', `Duplicate New Reference Name '${newPartRefName}' found — also targeted by row ${rowNum} for this model.`);
+                        first.flagged = true;
+                    }
+                    addErr(rowNum, serial, newPartRefName, 'New Reference Name', `Duplicate New Reference Name '${newPartRefName}' found — also targeted by row ${first.rowNum} for this model.`);
+                } else {
+                    newRefMap.set(newPartRefName, { rowNum: rowNum, flagged: false });
                 }
             }
 
@@ -1482,6 +1519,7 @@
                     childSerial: cell(row, idx.childSerial),
                     partName: collapseInternalSpaces(cell(row, idx.partName)),
                     partRefName: cell(row, idx.partRefName),
+                    newPartRefName: cell(row, idx.newPartRefName),
                     styleParameter: cell(row, idx.styleParameter),
                     width: cell(row, idx.w),
                     depth: cell(row, idx.d),
@@ -2578,6 +2616,28 @@
             // genuinely new (a direct refName match already means
             // instance.refName === row.partRefName, a no-op here).
             if (row.partRefName) instance.refName = row.partRefName;
+
+            // New Reference Name: rename this part's Reference name, and —
+            // per user request — automatically fix up every "@oldRefName"
+            // pointing at it elsewhere in the WHOLE model, not just parts
+            // present in this CSV (another part's formula, a hide/lock
+            // condition, a top-level parameter, ...). Reference name above
+            // stays the lookup key throughout; this only fires once that
+            // lookup has already resolved to a real, existing part.
+            if (row.newPartRefName && row.newPartRefName !== instance.refName) {
+                const newRef = row.newPartRefName;
+                const oldRef = instance.refName;
+                const nameOwner = ed.modelInstances.find(mi => mi !== instance && mi.refName === newRef);
+                if (nameOwner) {
+                    return `Cannot rename Reference name${oldRef ? ` '${oldRef}'` : ''} to '${newRef}' — '${newRef}' is already used by another existing part ('${nameOwner.name || '(unnamed)'}'). Pick a different New Reference Name, or rename that other part first (in an earlier row of this same CSV).`;
+                }
+                if (oldRef) {
+                    const escaped = oldRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const atRefRe = new RegExp('@' + escaped + '(?![A-Za-z0-9_])', 'g');
+                    rewriteAtRefsInPlace(ed, atRefRe, '@' + newRef);
+                }
+                instance.refName = newRef;
+            }
         } else {
             // Add path: fetch the child's full definition and push a new
             // instance, same as before. Only reachable here when neither
@@ -2589,6 +2649,14 @@
             // silent/confusing network failure.
             if (!row.childSerial) {
                 return `Part '${row.partName || '(unnamed)'}' — no existing part matched by Reference name or Part Name, and Child Serial Number is blank, so there's nothing to add. If this part already exists on the model (e.g. a self-modeled part with no catalog id), set its Reference name or make its Part Name match exactly; a genuinely new part needs a real Child Serial Number to add from.`;
+            }
+            // New Reference Name only makes sense as "rename THIS existing
+            // part" — reaching the Add path means no existing part matched,
+            // so there's nothing to rename from. Almost certainly a
+            // mismatched Reference name / Part Name on this row rather than
+            // an intentional add.
+            if (row.newPartRefName) {
+                return `New Reference Name '${row.newPartRefName}' given, but no existing part matched by Reference name or Part Name — nothing to rename. Check Reference name / Part Name on this row for a typo, or leave New Reference Name blank if this is meant to add a brand-new part.`;
             }
             // A brand-new part landing on a Part Name that's already in use
             // would leave two parts sharing one name — nothing distinguishes
@@ -2941,6 +3009,32 @@
     function partRefUsed(text, refName) {
         const escaped = refName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return new RegExp('@' + escaped + '(?![A-Za-z0-9_])').test(text);
+    }
+
+    // Rewrites every "@oldRef"-shaped occurrence found ANYWHERE in obj's own
+    // object graph (a top-level parameter's formula/value/ignore, another
+    // part's own parameter value, a frameModel, ...) to the new reference —
+    // mutates strings in place, never replacing an object/array itself, so
+    // every existing reference (e.g. a live `instance` variable elsewhere in
+    // compilePartEditRow) stays valid throughout. Used by the New Reference
+    // Name rename feature: renaming a part must not silently orphan every
+    // "@oldRef" that pointed at it, including on parts this CSV never
+    // mentions at all.
+    function rewriteAtRefsInPlace(obj, regex, replacement, seen) {
+        if (!obj || typeof obj !== 'object') return;
+        seen = seen || new Set();
+        if (seen.has(obj)) return;
+        seen.add(obj);
+        const keys = Array.isArray(obj) ? obj.map((_, i) => i) : Object.keys(obj);
+        keys.forEach(k => {
+            const v = obj[k];
+            if (typeof v === 'string') {
+                const replaced = v.replace(regex, replacement);
+                if (replaced !== v) obj[k] = replaced;
+            } else if (v && typeof v === 'object') {
+                rewriteAtRefsInPlace(v, regex, replacement, seen);
+            }
+        });
     }
 
     // `targetRows` (must have partRefName — only a named part can be
