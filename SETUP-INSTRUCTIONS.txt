@@ -81,7 +81,8 @@ STEP 7. Close and reopen PowerShell ISE so it picks up the new policy.
 Use the file "Run-Studio-Xml-Modification.bat":
 
   1. Put Run-Studio-Xml-Modification.bat in the SAME folder as
-     Studio-Xml-Modification.ps1.
+     Studio-Xml-Modification.ps1, or in a sub-folder of it
+     (for example "Setup Files"). It looks in both places.
   2. Double-click the .bat file.
 
 It runs:
