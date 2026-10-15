@@ -1,0 +1,176 @@
+============================================================
+ STUDIO XML MODIFICATION SCRIPT - SETUP INSTRUCTIONS
+ (Use this on every new computer, before running the script)
+============================================================
+
+WHY YOU SAW THE ERROR
+---------------------
+"Studio-Xml-Modification.ps1 cannot be loaded ... is not digitally signed"
+
+Windows blocks .ps1 scripts that it thinks came from outside the computer.
+Your script is on the O: drive (a network drive), and it was downloaded,
+so Windows treats it as "remote". The default policy (RemoteSigned)
+only runs remote scripts that are digitally signed. Your script is not
+signed, so Windows refuses to run it.
+
+The steps below fix this for your Windows user account. You do NOT need
+administrator rights.
+
+
+============================================================
+ PART A - PERMANENT FIX (do once per computer / per user)
+============================================================
+
+STEP 1. Open PowerShell
+        Start menu -> type "PowerShell" -> click "Windows PowerShell".
+        (Normal window is fine. "Run as administrator" is not needed.)
+
+STEP 2. See the current policy. Copy, paste and press Enter:
+
+        Get-ExecutionPolicy -List
+
+        You will see a table like:
+            MachinePolicy   Undefined
+            UserPolicy      Undefined
+            Process         Undefined
+            CurrentUser     Undefined
+            LocalMachine    RemoteSigned
+
+        IMPORTANT: if MachinePolicy or UserPolicy is NOT "Undefined",
+        your IT department controls the policy and Steps 3-4 will not
+        change it. Ask IT to allow scripts, or use PART B (the .bat file).
+
+STEP 3. Allow scripts for your user account (permanent).
+        Copy, paste and press Enter, then type Y and press Enter:
+
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+STEP 4. Remove the "downloaded from internet" block from the script files:
+
+        Get-ChildItem "O:\DECORIA\Ashok\Studio Xml Validation" -Recurse -Include *.ps1,*.bat | Unblock-File
+
+STEP 5. Try running the script:
+
+        & "O:\DECORIA\Ashok\Studio Xml Validation\Studio-Xml-Modification.ps1"
+
+        If it runs -> finished, you never need to do this again on this PC.
+
+STEP 6. ONLY IF you still get "is not digitally signed":
+        This happens because O: is a network drive, and Windows treats
+        every script on a network drive as remote, even after Unblock-File.
+        Run this instead of Step 3 (type Y when asked):
+
+        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser
+
+        Then repeat Step 5.
+
+        Note: "Bypass" means Windows will run any .ps1 file for your user
+        without checking. Only run scripts you trust.
+
+        Check it worked (CurrentUser should show RemoteSigned or Bypass):
+
+        Get-ExecutionPolicy -List
+
+STEP 7. Close and reopen PowerShell ISE so it picks up the new policy.
+
+
+============================================================
+ PART B - NO-SETTINGS OPTION (works on any PC, no policy change)
+============================================================
+
+Use the file "Run-Studio-Xml-Modification.bat":
+
+  1. Put Run-Studio-Xml-Modification.bat in the SAME folder as
+     Studio-Xml-Modification.ps1.
+  2. Double-click the .bat file.
+
+It runs:
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "Studio-Xml-Modification.ps1"
+
+"-ExecutionPolicy Bypass" applies only to that single run, so the PC's
+settings are not changed. (It does not work only if IT has locked the
+policy through Group Policy - see Step 2.)
+
+You can also run the same command yourself from PowerShell or CMD:
+
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "O:\DECORIA\Ashok\Studio Xml Validation\Studio-Xml-Modification.ps1"
+
+
+============================================================
+ PART C - CHECKLIST FOR ANOTHER COMPUTER
+============================================================
+
+[ ] 1. Windows PowerShell 5.1 or newer.
+       Check:  $PSVersionTable.PSVersion
+       (Windows 10 and 11 already have 5.1.)
+
+[ ] 2. Execution policy fixed  ->  PART A, or use the .bat from PART B.
+
+[ ] 3. The folder path is correct.
+       The script uses this folder by default (near the top of the script):
+
+           [string]$BasePath = "O:\DECORIA\Ashok\Studio Xml Validation"
+
+       If the new PC uses a different drive letter or folder, EITHER
+       edit that line in the script, OR run it with:
+
+           & ".\Studio-Xml-Modification.ps1" -BasePath "D:\Your\Folder"
+
+       Check the drive is connected:   Test-Path "O:\DECORIA\Ashok\Studio Xml Validation"
+       (Should print True. If False, map the O: drive first.)
+
+[ ] 4. The folder structure inside BasePath must be:
+
+           Studio Xml Validation\
+               Studio-Xml-Modification.ps1
+               Run-Studio-Xml-Modification.bat
+               File Input Name.csv            <- exact name
+               Studio Xml File Input\         <- put the .xml files here
+               Studio Xml File Output\        <- created automatically
+               Processed File\                <- created automatically
+
+[ ] 5. The CSV file:
+       - Name exactly:  File Input Name.csv
+       - Row 1 headers exactly (spelling, spaces, capitals):
+             File Name, IMOS Order Name, Project ID, Client Name, Room ID, Room Name
+       - Saved as comma-separated. In LibreOffice: File -> Save As ->
+         "Text CSV (.csv)" -> Keep Current Format -> Character set
+         "Unicode (UTF-8)", Field delimiter ","  .
+       - Close the CSV in LibreOffice/Excel before running the script
+         (an open file can be locked).
+       - 'File Name' must equal the XML file name WITHOUT ".xml".
+         Example: 3FO3GLIS8SS6.xml  ->  File Name = 3FO3GLIS8SS6
+       - No empty values in the other five columns (an empty value makes
+         that file fail with a clear message).
+
+[ ] 6. You have read AND write permission on the folder
+       (the script writes to "Studio Xml File Output" and "Processed File").
+
+[ ] 7. Optional setting in the script:
+           $EnablePVarCleanup = $true
+       Set to $false if you do NOT want fit / isEdited / remark removed
+       from the line items and the fields re-ordered.
+
+
+============================================================
+ PART D - QUICK COPY-PASTE (everything in one go)
+============================================================
+
+Open Windows PowerShell (normal, not admin) and paste these lines:
+
+Get-ExecutionPolicy -List
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+Get-ChildItem "O:\DECORIA\Ashok\Studio Xml Validation" -Recurse -Include *.ps1,*.bat | Unblock-File
+& "O:\DECORIA\Ashok\Studio Xml Validation\Studio-Xml-Modification.ps1"
+
+If the last line still says "not digitally signed", paste:
+
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser -Force
+& "O:\DECORIA\Ashok\Studio Xml Validation\Studio-Xml-Modification.ps1"
+
+
+============================================================
+ TO UNDO THE POLICY CHANGE LATER
+============================================================
+
+Set-ExecutionPolicy -ExecutionPolicy Undefined -Scope CurrentUser -Force
