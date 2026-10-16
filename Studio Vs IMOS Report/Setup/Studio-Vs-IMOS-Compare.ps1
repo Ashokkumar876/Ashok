@@ -47,7 +47,7 @@
 #   Status   : Ok | Missing in IMOS | Missing in Studio | Mismatch Quantity |
 #              Mismatch Finish   (Quantity is reported before Finish)
 #
-# OUTPUT ROW ORDER (per cabinet)
+# OUTPUT ROW ORDER (per cabinet, one empty row between cabinets)
 #   Panels (matched, IMOS order) -> panel missing/extra rows
 #   Stretchable parts            -> stretchable missing rows
 #   Hardware                     -> hardware missing rows
@@ -769,6 +769,13 @@ function Compare-Reports
         foreach ($R in (Compare-Articles @($IItems | Where-Object { $_.Section -eq "Stretchable" }) @($SItems | Where-Object { $_.Section -eq "Stretchable" }) $true))  { $Results.Add($R) }
         foreach ($R in (Compare-Articles @($IItems | Where-Object { $_.Section -eq "Hardware" })    @($SItems | Where-Object { $_.Section -eq "Hardware" })    $false)) { $Results.Add($R) }
 
+        # One empty row between cabinets (Install Codes)
+        if ($Output.Count -gt 0)
+        {
+            $Blank = [pscustomobject]@{ Imos = $null; Studio = $null; Status = "" }
+            $Output.Add((New-OutputRow "" "" "" "" "" $Blank))
+        }
+
         foreach ($R in $Results)
         {
             $Output.Add((New-OutputRow $OrderNo $Cab.InstallCode $Cab.Name $ImosSize $StudioSize $R))
@@ -918,8 +925,9 @@ foreach ($Key in $AllOrders)
 
         $Step = "[3] Compare"
         $Rows = Compare-Reports $OrderNo $Imos $Studio
-        $NotOk = @($Rows | Where-Object { $_.'Comparison Status' -ne $StatusOk }).Count
-        Write-Host "  $Step : OK ($($Rows.Count) rows, $NotOk not Ok)" -ForegroundColor Green
+        $ItemRows = @($Rows | Where-Object { $_.'Comparison Status' -ne "" })   # without the empty separator rows
+        $NotOk    = @($ItemRows | Where-Object { $_.'Comparison Status' -ne $StatusOk }).Count
+        Write-Host "  $Step : OK ($($ItemRows.Count) rows, $NotOk not Ok)" -ForegroundColor Green
 
         $Step = "[4] Write output"
         $OutputPath = Write-OutputCsv $OrderNo $Rows
