@@ -8,8 +8,11 @@
 #   Reads every *.xml file in "Studio Xml File Input", finds the matching row
 #   in "File Input Name.csv" (XML file name without extension = CSV
 #   'File Name'), applies the corrections below and writes the result to
-#   "Studio Xml File Output". The original input file is never modified; a
-#   backup copy is also kept in "Processed File\<yyyy-MM-dd>".
+#   "Studio Xml File Output". The original input file is never modified.
+#   After a file is processed successfully, the original is MOVED from
+#   "Studio Xml File Input" to the archive "Processed File\<yyyy-MM-dd>", so
+#   the input folder is left empty. Files that fail stay in the input folder
+#   so they can be fixed and run again.
 #
 # CSV COLUMNS USED (verified against the sample CSV)
 #   File Name | IMOS Order Name | Project ID | Client Name | Room ID | Room Name
@@ -491,13 +494,6 @@ foreach ($XmlFile in $XmlFiles)
         $Row = $Rows[0]
 
         # ----------------------------------------------------
-        # Backup Original XML (copy only, the input is not changed)
-        # ----------------------------------------------------
-        Copy-Item -LiteralPath $XmlFile.FullName `
-                  -Destination (Join-Path $ProcessedDateFolder $XmlFile.Name) `
-                  -Force
-
-        # ----------------------------------------------------
         # Read XML as UTF-8 text (keeps formatting/line endings)
         # ----------------------------------------------------
         $Content = [System.IO.File]::ReadAllText($XmlFile.FullName, [System.Text.Encoding]::UTF8)
@@ -544,6 +540,26 @@ foreach ($XmlFile in $XmlFiles)
         $OutputFile = Join-Path $OutputFolder $XmlFile.Name
         [System.IO.File]::WriteAllText($OutputFile, $Content, $Utf8NoBom)
 
+        # ----------------------------------------------------
+        # Move Original XML to the archive (Processed File\<date>)
+        # If the same name was already archived today, add the time.
+        # ----------------------------------------------------
+        $ArchiveFile = Join-Path $ProcessedDateFolder $XmlFile.Name
+        if (Test-Path -LiteralPath $ArchiveFile)
+        {
+            $ArchiveName = $FileNameWithoutExt + "_" + (Get-Date -Format "HHmmss") + $XmlFile.Extension
+            $ArchiveFile = Join-Path $ProcessedDateFolder $ArchiveName
+        }
+
+        try
+        {
+            Move-Item -LiteralPath $XmlFile.FullName -Destination $ArchiveFile
+        }
+        catch
+        {
+            throw "Output was written, but the input file could not be moved to the archive: $($_.Exception.Message)"
+        }
+
         $SuccessFiles.Add($XmlFile.Name)
         Write-Host "Completed : $($XmlFile.Name)" -ForegroundColor Green
     }
@@ -581,7 +597,7 @@ if ($ErrorLog.Count -gt 0)
 
 Write-Host "==================================="
 Write-Host "Output folder : $OutputFolder"
-Write-Host "Backup folder : $ProcessedDateFolder"
+Write-Host "Archive folder: $ProcessedDateFolder"
 Write-Host "==================================="
 
 if ($FailedFiles.Count -gt 0) { exit 1 }

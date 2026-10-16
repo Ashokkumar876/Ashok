@@ -14,7 +14,7 @@ All PowerShell files are kept inside "Setup Files".
       File Input Name.csv                 <- users fill this in
       Studio Xml File Input\              <- users put .xml files here
       Studio Xml File Output\             <- results appear here (auto-created)
-      Processed File\                     <- dated backups (auto-created)
+      Processed File\                     <- archive of processed inputs (auto-created)
       Setup Files\                        <- ADMIN only, users do not open
           Studio-Xml-Modification.ps1
           SETUP-INSTRUCTIONS.txt          <- this file
@@ -47,6 +47,13 @@ copied to any drive or PC (O:, D:, a network share...) and still work.
   3. Double-click "Run-Studio-Xml-Modification.bat".
   4. Read the summary. Press any key to close the window.
   5. Take the results from "Studio Xml File Output".
+
+After the run, every file that was processed successfully is MOVED out
+of "Studio Xml File Input" into "Processed File\<date>" (the archive),
+so the input folder is empty again. A file that FAILED stays in
+"Studio Xml File Input": fix the CSV (or the file) and run the .bat again.
+If the same file name is archived twice on one day, the time is added
+to the name (e.g. 3FO3GLIS8SS6_153012.xml) so nothing is overwritten.
 
 The .bat runs PowerShell with "-ExecutionPolicy Bypass" for that one run
 only, so the "is not digitally signed" error does not appear and no
