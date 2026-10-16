@@ -46,17 +46,37 @@
 #     with any error is not written to the output folder.
 #   - A summary of successful files, failed files and errors is printed at the end.
 #
+# FOLDER LAYOUT
+#   Studio Xml Validation\                 <- BasePath (user folder)
+#       Run-Studio-Xml-Modification.bat    <- the only file users run
+#       File Input Name.csv
+#       Studio Xml File Input\
+#       Studio Xml File Output\
+#       Processed File\
+#       Setup Files\
+#           Studio-Xml-Modification.ps1    <- this script
+#
 # USAGE
-#   .\Studio-Xml-Modification.ps1
+#   Double-click Run-Studio-Xml-Modification.bat in the main folder.
+#   Without -BasePath, the folder above this script's folder is used, so the
+#   whole "Studio Xml Validation" folder can be moved or copied to any drive.
 #   .\Studio-Xml-Modification.ps1 -BasePath "D:\Some\Other\Folder"
 # ============================================================
 
 param(
-    [string]$BasePath = "O:\DECORIA\Ashok\Studio Xml Validation"
+    [string]$BasePath = ""
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($BasePath))
+{
+    $BasePath = Split-Path -Parent $PSScriptRoot
+}
+$BasePath = [System.IO.Path]::GetFullPath($BasePath.Trim().Trim('"'))
+
+Write-Host "Working folder : $BasePath"
 
 $InputFolder     = Join-Path $BasePath "Studio Xml File Input"
 $OutputFolder    = Join-Path $BasePath "Studio Xml File Output"

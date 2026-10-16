@@ -1,0 +1,126 @@
+============================================================
+ STUDIO XML MODIFICATION - SETUP INSTRUCTIONS
+============================================================
+
+============================================================
+ PART A - FOLDER LAYOUT (set this up once)
+============================================================
+
+Users only see and use the files in the main folder.
+All PowerShell files are kept inside "Setup Files".
+
+  Studio Xml Validation\                  <- MAIN folder (users)
+      Run-Studio-Xml-Modification.bat     <- users double-click THIS
+      File Input Name.csv                 <- users fill this in
+      Studio Xml File Input\              <- users put .xml files here
+      Studio Xml File Output\             <- results appear here (auto-created)
+      Processed File\                     <- dated backups (auto-created)
+      Setup Files\                        <- ADMIN only, users do not open
+          Studio-Xml-Modification.ps1
+          SETUP-INSTRUCTIONS.txt          <- this file
+
+Steps to organise your current folder
+(O:\DECORIA\Ashok\Studio Xml Validation):
+
+  1. MOVE  Studio-Xml-Modification.ps1          ->  Setup Files\
+  2. MOVE  SETUP-INSTRUCTIONS.txt               ->  Setup Files\
+  3. REPLACE Run-Studio-Xml-Modification.bat in the MAIN folder with
+     the new version, and DELETE any old copy inside Setup Files\.
+  4. Leave File Input Name.csv and the three "Studio Xml File ..." /
+     "Processed File" folders in the MAIN folder.
+
+  Other files (Xml File Validation.ps1, Panel Parameters Mapping.csv,
+  Temp\) belong to a different script. If you move them into Setup Files,
+  first check that script does not use hard-coded paths to them.
+
+No path needs to be edited. The .bat tells the script to use the folder
+the .bat is in, so the whole "Studio Xml Validation" folder can be
+copied to any drive or PC (O:, D:, a network share...) and still work.
+
+
+============================================================
+ PART B - HOW USERS RUN IT
+============================================================
+
+  1. Fill in "File Input Name.csv" and close it.
+  2. Put the .xml files into "Studio Xml File Input".
+  3. Double-click "Run-Studio-Xml-Modification.bat".
+  4. Read the summary. Press any key to close the window.
+  5. Take the results from "Studio Xml File Output".
+
+The .bat runs PowerShell with "-ExecutionPolicy Bypass" for that one run
+only, so the "is not digitally signed" error does not appear and no
+Windows setting has to be changed. No administrator rights are needed.
+
+
+============================================================
+ PART C - CHECKLIST FOR ANOTHER COMPUTER
+============================================================
+
+[ ] 1. Copy the whole "Studio Xml Validation" folder (or map the same
+       network drive). Keep the layout from PART A.
+
+[ ] 2. Windows PowerShell 5.1 or newer (Windows 10/11 already have it).
+       Check in PowerShell:   $PSVersionTable.PSVersion
+
+[ ] 3. IT policy check. In PowerShell run:
+
+           Get-ExecutionPolicy -List
+
+       If MachinePolicy or UserPolicy is NOT "Undefined", IT has locked
+       script execution and even the .bat cannot bypass it.
+       Ask IT to allow PowerShell scripts for this folder.
+
+[ ] 4. If Windows shows "Windows protected your PC" or a security warning
+       when double-clicking the .bat (files copied from internet/email):
+       right-click the .bat -> Properties -> tick "Unblock" -> OK.
+       Or unblock everything at once in PowerShell:
+
+           Get-ChildItem "O:\DECORIA\Ashok\Studio Xml Validation" -Recurse -Include *.ps1,*.bat | Unblock-File
+
+       (change the path if the folder is somewhere else)
+
+[ ] 5. The CSV file "File Input Name.csv":
+       - Row 1 headers exactly (spelling, spaces, capitals):
+             File Name, IMOS Order Name, Project ID, Client Name, Room ID, Room Name
+       - Save in LibreOffice: File -> Save As -> "Text CSV (.csv)" ->
+         Keep Current Format -> Character set "Unicode (UTF-8)",
+         Field delimiter ","
+       - Close it before running (an open file can be locked).
+       - 'File Name' = XML file name WITHOUT ".xml"
+         Example: 3FO3GLIS8SS6.xml  ->  File Name = 3FO3GLIS8SS6
+       - No empty values in the other five columns.
+
+[ ] 6. The user has read AND write permission on the main folder.
+
+[ ] 7. Optional (admin): in Setup Files\Studio-Xml-Modification.ps1,
+           $EnablePVarCleanup = $true
+       Set to $false to keep fit / isEdited / remark in the line items
+       and keep the original field order.
+
+
+============================================================
+ PART D - OPTIONAL: run the .ps1 directly (admin / ISE testing)
+============================================================
+
+Users do not need this. Only if you want to run or debug the .ps1
+directly in PowerShell ISE, allow scripts once for your account
+(no admin needed):
+
+  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+
+If it still says "not digitally signed" (scripts on a network drive such
+as O: count as remote):
+
+  Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser -Force
+
+  ("Bypass" runs any .ps1 for your user without checking - only run
+   scripts you trust.)
+
+Then run:
+
+  & "O:\DECORIA\Ashok\Studio Xml Validation\Setup Files\Studio-Xml-Modification.ps1"
+
+To undo the policy change later:
+
+  Set-ExecutionPolicy -ExecutionPolicy Undefined -Scope CurrentUser -Force
