@@ -38,6 +38,9 @@
 #                panel(s) of that size = Mismatch Quantity.
 #              Size only in one file -> Missing in IMOS / Missing in Studio.
 #              "Installation Cost" (Studio only) is left out.
+#   Glass    : the Studio "Glass Name" section is compared like panels (IMOS
+#              lists glass inside its panel section). For glass, only the size
+#              is compared; the finish is ignored.
 #   Stretchable parts and Hardware:
 #              matched by Article Code (exact) within the same cabinet. Rows
 #              with the same Article Code are added together. Only the quantity
@@ -87,6 +90,7 @@ $ExcludeStudioPanels = @("Installation Cost")
 $PanelHeader       = "Panel Name"
 $StretchableHeader = "Stretchable Purchase Part Name"
 $HardwareHeader    = "Hardware Description"
+$GlassHeader       = "Glass Name"          # compared like panels, finish ignored
 
 # Status texts
 $StatusOk             = "Ok"
@@ -432,6 +436,7 @@ function Read-ReportStructure
     $Cabinets = [ordered]@{}
     $Current  = $null
     $Section  = $null
+    $IsGlass  = $false
     $ItemId   = 0
 
     for ($i = 0; $i -lt $Rows.Count; $i++)
@@ -466,9 +471,10 @@ function Read-ReportStructure
         }
 
         # --- Section header rows ---
-        if ($A -eq $PanelHeader)       { $Section = "Panel";       continue }
-        if ($A -eq $StretchableHeader) { $Section = "Stretchable"; continue }
-        if ($A -eq $HardwareHeader)    { $Section = "Hardware";    continue }
+        if ($A -eq $PanelHeader)       { $Section = "Panel";       $IsGlass = $false; continue }
+        if ($A -eq $GlassHeader)       { $Section = "Panel";       $IsGlass = $true;  continue }
+        if ($A -eq $StretchableHeader) { $Section = "Stretchable"; $IsGlass = $false; continue }
+        if ($A -eq $HardwareHeader)    { $Section = "Hardware";    $IsGlass = $false; continue }
 
         if ($null -eq $Current -or $null -eq $Section) { continue }   # title rows etc.
 
@@ -483,7 +489,7 @@ function Read-ReportStructure
         }
 
         $ItemId++
-        $Current.Items.Add([pscustomobject]@{ Id = $ItemId; Section = $Section; Row = $Row })
+        $Current.Items.Add([pscustomobject]@{ Id = $ItemId; Section = $Section; IsGlass = $IsGlass; Row = $Row })
     }
 
     if ($Cabinets.Count -eq 0) { throw "$Source file: no cabinets found (no row above a '$PanelHeader' row)." }
@@ -527,6 +533,14 @@ function Test-PanelFinish
     $IT = [string]$I[$PanelTopCol]; $IB = [string]$I[$PanelBottomCol]
     $ST = [string]$S[$PanelTopCol]; $SB = [string]$S[$PanelBottomCol]
     return (($IT -ceq $ST -and $IB -ceq $SB) -or ($IT -ceq $SB -and $IB -ceq $ST))
+}
+
+# Finish check for a pair of panel items; glass (either side) -> finish ignored
+function Test-PanelPairFinish
+{
+    param([psobject]$IItem, [psobject]$SItem)
+    if ($IItem.IsGlass -or $SItem.IsGlass) { return $true }
+    return (Test-PanelFinish $IItem.Row $SItem.Row)
 }
 
 function Compare-Panels
@@ -573,10 +587,10 @@ function Compare-Panels
             $Best = $null; $BestScore = -1
             foreach ($Cand in $Pool)
             {
-                if ($ImosIsAnchor) { $IR = $Anchor.Row; $SR = $Cand.Row } else { $IR = $Cand.Row; $SR = $Anchor.Row }
+                if ($ImosIsAnchor) { $II = $Anchor; $SI = $Cand } else { $II = $Cand; $SI = $Anchor }
                 $Score = 0
-                if (Test-PanelFinish $IR $SR) { $Score += 2 }
-                if ((Get-NameKey ([string]$IR[$PanelNameCol])) -eq (Get-NameKey ([string]$SR[$PanelNameCol]))) { $Score += 1 }
+                if (Test-PanelPairFinish $II $SI) { $Score += 2 }
+                if ((Get-NameKey ([string]$II.Row[$PanelNameCol])) -eq (Get-NameKey ([string]$SI.Row[$PanelNameCol]))) { $Score += 1 }
                 if ($Score -gt $BestScore) { $Best = $Cand; $BestScore = $Score }
             }
             $Pool.Remove($Best)
@@ -596,7 +610,7 @@ function Compare-Panels
         if ($PairOfImos.ContainsKey($It.Id))
         {
             $S = $PairOfImos[$It.Id]
-            $Status = if (Test-PanelFinish $It.Row $S.Row) { $StatusOk } else { $StatusMismatchFinish }
+            $Status = if (Test-PanelPairFinish $It $S) { $StatusOk } else { $StatusMismatchFinish }
             $Matched.Add([pscustomobject]@{ Imos = $It.Row; Studio = $S.Row; Status = $Status })
         }
         else
