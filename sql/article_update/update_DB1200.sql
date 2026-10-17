@@ -2,6 +2,8 @@
    Change ARTICLE_ID  DB_1200 -> DB-1200  in dbo.CONNDESC
    Database : HW_STUDIO_2026_ORG
    CSV      : ArticleUpdate_DB1200.csv (NAME,OLD_ARTICLE_ID,NEW_ARTICLE_ID)
+   Comparisons use COLLATE Latin1_General_CS_AS (exact, case-sensitive)
+   because CONNDESC columns differ from the database default collation.
    A row is changed only if NAME matches AND its current ARTICLE_ID still
    equals OLD_ARTICLE_ID. Only data changes; #temp tables vanish when
    the window is closed.
@@ -30,26 +32,26 @@ INSERT INTO #Upd (NAME, OLD_ARTICLE_ID, NEW_ARTICLE_ID) VALUES
 /* ---- 2. Preview ---------------------------------------------------- */
 SELECT 'PREVIEW' AS Step, c.NAME, c.TEXT_SHORT,
        c.ARTICLE_ID AS CURRENT_ARTICLE_ID, u.OLD_ARTICLE_ID, u.NEW_ARTICLE_ID,
-       CASE WHEN c.ARTICLE_ID = u.OLD_ARTICLE_ID THEN 'WILL CHANGE'
+       CASE WHEN c.ARTICLE_ID = u.OLD_ARTICLE_ID COLLATE Latin1_General_CS_AS THEN 'WILL CHANGE'
             ELSE 'SKIPPED - current value differs' END AS Result
 FROM dbo.CONNDESC c
-JOIN #Upd u ON c.NAME = u.NAME;
+JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS;
 
 SELECT 'NOT FOUND IN CONNDESC' AS Step, u.*
 FROM #Upd u
-WHERE NOT EXISTS (SELECT 1 FROM dbo.CONNDESC c WHERE c.NAME = u.NAME);
+WHERE NOT EXISTS (SELECT 1 FROM dbo.CONNDESC c WHERE c.NAME = u.NAME COLLATE Latin1_General_CS_AS);
 
 -- Other rows that already use the new code (info only)
 SELECT 'NEW CODE ALREADY USED BY' AS Step, c.NAME, c.ARTICLE_ID, c.TEXT_SHORT, c.SUPPLIER
 FROM dbo.CONNDESC c
-JOIN #Upd u ON c.ARTICLE_ID = u.NEW_ARTICLE_ID AND c.NAME <> u.NAME;
+JOIN #Upd u ON c.ARTICLE_ID = u.NEW_ARTICLE_ID COLLATE Latin1_General_CS_AS AND c.NAME <> u.NAME COLLATE Latin1_General_CS_AS;
 
 /* ---- 3. Update ----------------------------------------------------- */
 IF OBJECT_ID('tempdb..#Log') IS NOT NULL DROP TABLE #Log;
 CREATE TABLE #Log (NAME NVARCHAR(255) COLLATE DATABASE_DEFAULT, OLD_ARTICLE_ID NVARCHAR(255) COLLATE DATABASE_DEFAULT, NEW_ARTICLE_ID NVARCHAR(255) COLLATE DATABASE_DEFAULT);
 
 DECLARE @Expected INT = (SELECT COUNT(*) FROM dbo.CONNDESC c
-                         JOIN #Upd u ON c.NAME = u.NAME AND c.ARTICLE_ID = u.OLD_ARTICLE_ID);
+                         JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS AND c.ARTICLE_ID = u.OLD_ARTICLE_ID COLLATE Latin1_General_CS_AS);
 
 BEGIN TRAN;
 
@@ -57,7 +59,7 @@ UPDATE c
 SET    c.ARTICLE_ID = u.NEW_ARTICLE_ID
 OUTPUT inserted.NAME, deleted.ARTICLE_ID, inserted.ARTICLE_ID INTO #Log
 FROM   dbo.CONNDESC c
-JOIN   #Upd u ON c.NAME = u.NAME AND c.ARTICLE_ID = u.OLD_ARTICLE_ID;
+JOIN   #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS AND c.ARTICLE_ID = u.OLD_ARTICLE_ID COLLATE Latin1_General_CS_AS;
 
 DECLARE @Updated INT = @@ROWCOUNT;
 
@@ -77,7 +79,7 @@ END
 /* ---- 4. Current value ---------------------------------------------- */
 SELECT 'AFTER' AS Step, c.NAME, c.ARTICLE_ID
 FROM dbo.CONNDESC c
-JOIN #Upd u ON c.NAME = u.NAME;
+JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS;
 
 /* ---- UNDO (run separately only if needed) ---------------------------
 UPDATE dbo.CONNDESC

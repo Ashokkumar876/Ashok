@@ -33,17 +33,17 @@ UPDATE #Upd SET NAME           = LTRIM(RTRIM(NAME)),
 /* ---- 2. Preview ---------------------------------------------------- */
 SELECT 'PREVIEW' AS Step, c.NAME, c.ARTICLE_ID AS OLD_ARTICLE_ID, u.NEW_ARTICLE_ID
 FROM dbo.CONNDESC c
-JOIN #Upd u ON c.NAME = u.NAME;
+JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS;
 
 SELECT 'NOT FOUND IN CONNDESC' AS Step, u.*
 FROM #Upd u
-WHERE NOT EXISTS (SELECT 1 FROM dbo.CONNDESC c WHERE c.NAME = u.NAME);
+WHERE NOT EXISTS (SELECT 1 FROM dbo.CONNDESC c WHERE c.NAME = u.NAME COLLATE Latin1_General_CS_AS);
 
 /* ---- 3. Update (with old/new log) ---------------------------------- */
 IF OBJECT_ID('tempdb..#Log') IS NOT NULL DROP TABLE #Log;
 CREATE TABLE #Log (NAME NVARCHAR(255) COLLATE DATABASE_DEFAULT, OLD_ARTICLE_ID NVARCHAR(255) COLLATE DATABASE_DEFAULT, NEW_ARTICLE_ID NVARCHAR(255) COLLATE DATABASE_DEFAULT);
 
-DECLARE @Expected INT = (SELECT COUNT(*) FROM dbo.CONNDESC c JOIN #Upd u ON c.NAME = u.NAME);
+DECLARE @Expected INT = (SELECT COUNT(*) FROM dbo.CONNDESC c JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS);
 
 BEGIN TRAN;
 
@@ -51,7 +51,7 @@ UPDATE c
 SET    c.ARTICLE_ID = u.NEW_ARTICLE_ID
 OUTPUT inserted.NAME, deleted.ARTICLE_ID, inserted.ARTICLE_ID INTO #Log
 FROM   dbo.CONNDESC c
-JOIN   #Upd u ON c.NAME = u.NAME;
+JOIN   #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS;
 
 DECLARE @Updated INT = @@ROWCOUNT;
 
@@ -71,7 +71,7 @@ END
 /* ---- 4. Check the current value ------------------------------------ */
 SELECT 'AFTER' AS Step, c.NAME, c.ARTICLE_ID
 FROM dbo.CONNDESC c
-JOIN #Upd u ON c.NAME = u.NAME;
+JOIN #Upd u ON c.NAME = u.NAME COLLATE Latin1_General_CS_AS;
 
 /* ---- UNDO (run separately if you need to restore the old value) -----
 UPDATE dbo.CONNDESC
